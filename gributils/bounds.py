@@ -42,7 +42,7 @@ def bounds(layer, fill_holes=True, simplify=0.01):
 
     proj = LayerProjection(layer)
     validshape = shapely.ops.transform(proj.scale, validshape)
-    validshape = shapely.ops.transform(proj.projunproject, validshape)
+    validshape = shapely.ops.transform(proj.unproject, validshape)
     
     validshape = split_dateline(validshape)
     validshape = unwrap_dateline(validshape)
