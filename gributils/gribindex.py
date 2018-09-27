@@ -51,13 +51,13 @@ class GribIndex(object):
     def add_file(self, filepath):
         parametermap = self.load_parametermap(filepath)
         
-        cur.execute("SELECT count(*) FROM gribfiles WHERE file = %s",
+        self.cur.execute("SELECT count(*) FROM gribfiles WHERE file = %s",
                      (filepath,))
-        if cur.fetchone()[0] > 0:
+        if self.cur.fetchone()[0] > 0:
             print("%s IGNORE" % filepath)
             continue
         print("%s INDEX" % filepath)
-        cur.execute("INSERT INTO gribfiles (file) VALUES (%s)",
+        self.cur.execute("INSERT INTO gribfiles (file) VALUES (%s)",
                      (filepath,))
         with pygrib.open(filepath) as grbs:
             for grb in grbs:
@@ -69,17 +69,34 @@ class GribIndex(object):
                 measurementid = "%s,%s,%s" % (parameter_name, parameter_unit, grb.typeOfLevel, grb.level)
                 gridid, poly = extract_polygons(grb)
 
-                cur.execute("INSERT INTO gridareas (gridid, projparams, the_geom) VALUES (%s, %s, st_geomfromtext(%s, 4326)) ON CONFLICT DO NOTHING",
+                self.cur.execute("INSERT INTO gridareas (gridid, projparams, the_geom) VALUES (%s, %s, st_geomfromtext(%s, 4326)) ON CONFLICT DO NOTHING",
                             (gridid, json.dumps(grb.projparams), poly.wkt))
 
-                cur.execute("""INSERT
+                self.cur.execute("""INSERT
                                  INTO measurement (measurementid, parameterName, parameterUnit, typeOfLevel, level)
                                  VALUES (%s, %s, %s, %s)
                                  ON CONFLICT DO NOTHING""",
                             (measurementid, parameter_name, parameter_unit, grb.typeOfLevel, grb.level))
 
-                cur.execute("INSERT INTO griblayers (file, measurementid, timestamp, gridid) VALUES (%s, %s, %s, %s)",
+                self.cur.execute("INSERT INTO griblayers (file, measurementid, timestamp, gridid) VALUES (%s, %s, %s, %s)",
                             (filepath, measurementid, grb.validDate, gridid))
 
-        cur.execute("COMMIT")
+        self.cur.execute("COMMIT")
 
+    def lookup(self, lat=None, lon=None, timestamp=None, parameterName=None, parameterUnit=None, typeOfLevel=None, level=None, last_before=True):
+        """Return a set of griblayers matching the specified requirements"""
+
+        self.cur.execute("""
+          select
+            griblayers.*
+          from
+            griblayers
+            join measurement on 
+              griblayers.measurementid = measurement.measurementid
+            join gridareas on
+              griblayers.gridid = gridareas.gridid
+          where
+
+
+
+        """ % {})
