@@ -137,8 +137,10 @@ class GribIndex(object):
               griblayers.measurementid = measurement.measurementid
             join gridareas on
               griblayers.gridid = gridareas.gridid
-          where
-        """ + "\n and ".join(filters)
+        """
+
+        if filters:
+            sql += " where " + "\n and ".join(filters)
 
         if output == "layers":
             sql = """
