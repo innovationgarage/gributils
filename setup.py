@@ -16,7 +16,9 @@ setuptools.setup(name='gributils',
           'shapely',
           'scipy',
           'scikit-image',
-          'click'
+          'click',
+          'click-datetime',
+          'psycopg2'
       ],
       include_package_data=True,
       entry_points='''

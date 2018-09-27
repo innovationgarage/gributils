@@ -55,7 +55,7 @@ class GribIndex(object):
                      (filepath,))
         if self.cur.fetchone()[0] > 0:
             print("%s IGNORE" % filepath)
-            continue
+            return
         print("%s INDEX" % filepath)
         self.cur.execute("INSERT INTO gribfiles (file) VALUES (%s)",
                      (filepath,))
@@ -83,12 +83,54 @@ class GribIndex(object):
 
         self.cur.execute("COMMIT")
 
-    def lookup(self, lat=None, lon=None, timestamp=None, parameterName=None, parameterUnit=None, typeOfLevel=None, level=None, last_before=True):
+    def lookup(self, output="layers",
+               lat=None, lon=None, timestamp=None, parameter_name=None, parameter_unit=None, type_of_level=None, level=None,
+               timestamp_last_before=True, level_highest_below=True):
         """Return a set of griblayers matching the specified requirements"""
 
-        self.cur.execute("""
-          select
-            griblayers.*
+        args = dict(lat=lat, lon=lon, timestamp=timestamp,
+                    parameter_name=parameter_name, parameter_unit=parameter_unit,
+                    type_of_level=type_of_level, level=level)
+        filters = []
+        if lat is not None and lon is not None:
+            filters.append("st_contains(gridareas.the_geom, ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326))")
+        if timestamp is not None:
+            if timestamp_last_before:
+                filters.append("""
+                  griblayers.timestamp < %(timestamp)s
+                  and (select count(*)
+                       from griblayers as g2
+                       where
+                         g2.measurementid = gridlayers.measurementid
+                         and g2.gridid = gridlayers.gridid
+                         and g2.timestamp > gridlayers.timestamp
+                      ) = 0
+                """)
+            else:
+                pass
+        if parameter_name is not None:
+            filters.append("measurement.parameterName = %(parameter_name)s")
+        if parameter_unit is not None:
+            filters.append("measurement.parameterUnit = %(parameter_unit)s")
+        if type_of_level is not None:
+            filters.append("measurement.typeOfLevel = %(type_of_level)s")
+        if level is not None:
+            if level_highest_below:
+                filters.append("""
+                  measurement.level < %(level)s
+                  and (select count(*)
+                       from measurement as m2
+                       where
+                         m2.parameterName = measurement.parameterName
+                         and m2.parameterUnit = measurement.parameterUnit
+                         and m2.typeOfLevel = measurement.typeOfLevel
+                         and m2.level > measurement.level
+                      ) = 0
+                """)
+            else:
+                pass
+
+        sql = """
           from
             griblayers
             join measurement on 
@@ -96,7 +138,52 @@ class GribIndex(object):
             join gridareas on
               griblayers.gridid = gridareas.gridid
           where
+        """ + "\n and ".join(filters)
 
-
-
-        """ % {})
+        if output == "layers":
+            sql = """
+              select
+                griblayers.file,
+                griblayers.timestamp
+              %s
+              group by
+                griblayers.file,
+                griblayers.timestamp
+            """ % sql
+        elif output == "names":
+            sql = """
+              select
+                measurement.parameterName
+              %s
+              group by
+                measurement.parameterName
+            """ % sql
+        elif output == "units":
+            sql = """
+              select
+                measurement.parameterUnit
+              %s
+              group by
+                measurement.parameterUnit
+            """ % sql
+        elif output == "level-types":
+            sql = """
+              select
+                measurement.typeOfLevel
+              %s
+              group by
+                measurement.typeOfLevel
+            """ % sql
+        elif output == "levels":
+            sql = """
+              select
+                measurement.level
+              %s
+              group by
+                measurement.level
+            """ % sql
+        else:
+            raise Exception("Unknown output. Available outputs are layers, names, units, level-types, levels")
+            
+        self.cur.execute(sql, args)
+        return self.cur
