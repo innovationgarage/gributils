@@ -17,5 +17,6 @@ create table griblayers(
   file varchar references gribfiles(file),
   measurementid varchar references measurement(measurementid),
   timestamp timestamp,
+  layeridx integer,
   gridid varchar references gridareas(gridid));
 create index on griblayers(timestamp);

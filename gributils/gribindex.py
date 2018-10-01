@@ -60,26 +60,28 @@ class GribIndex(object):
         self.cur.execute("INSERT INTO gribfiles (file) VALUES (%s)",
                      (filepath,))
         with pygrib.open(filepath) as grbs:
-            for grb in grbs:
+            for grb_idx, grb in enumerate(grbs):
+                # layer indexes start at 1
+                layer_idx = grb_idx + 1
                 parameter_name = grb.parameterName
                 parameter_unit = grb.parameterUnits
-                if grb.parameterNumber in parametermap:
-                    parameter_name, parameter_unit = parametermap[grb.parameterNumber]
+                if grb.parameterName in parametermap:
+                    parameter_name, parameter_unit = parametermap[grb.parameterName]
               
-                measurementid = "%s,%s,%s" % (parameter_name, parameter_unit, grb.typeOfLevel, grb.level)
-                gridid, poly = extract_polygons(grb)
+                measurementid = "%s,%s,%s,%s" % (parameter_name, parameter_unit, grb.typeOfLevel, grb.level)
+                gridid, poly = self.extract_polygons(grb)
 
                 self.cur.execute("INSERT INTO gridareas (gridid, projparams, the_geom) VALUES (%s, %s, st_geomfromtext(%s, 4326)) ON CONFLICT DO NOTHING",
                             (gridid, json.dumps(grb.projparams), poly.wkt))
 
                 self.cur.execute("""INSERT
                                  INTO measurement (measurementid, parameterName, parameterUnit, typeOfLevel, level)
-                                 VALUES (%s, %s, %s, %s)
+                                 VALUES (%s, %s, %s, %s, %s)
                                  ON CONFLICT DO NOTHING""",
                             (measurementid, parameter_name, parameter_unit, grb.typeOfLevel, grb.level))
 
-                self.cur.execute("INSERT INTO griblayers (file, measurementid, timestamp, gridid) VALUES (%s, %s, %s, %s)",
-                            (filepath, measurementid, grb.validDate, gridid))
+                self.cur.execute("INSERT INTO griblayers (file, layeridx, measurementid, timestamp, gridid) VALUES (%s, %s, %s, %s, %s)",
+                            (filepath, layer_idx, measurementid, grb.validDate, gridid))
 
         self.cur.execute("COMMIT")
 
@@ -146,10 +148,12 @@ class GribIndex(object):
             sql = """
               select
                 griblayers.file,
+                griblayers.layeridx,
                 griblayers.timestamp
               %s
               group by
                 griblayers.file,
+                griblayers.layeridx,
                 griblayers.timestamp
             """ % sql
         elif output == "names":
