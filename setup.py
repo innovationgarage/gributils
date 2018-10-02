@@ -20,7 +20,7 @@ indexing gribfiles. Current features include:
   where too low precision in Dx / Dy have resulted in a distorted grid.
 * Conversion from values with U and V components (e.g. for wind) to
   magnitude and degree north.
-      """
+      """,
       long_description_content_type="text/markdown",
       author='Egil Moeller',
       author_email='egil@innovationgarage.no',
