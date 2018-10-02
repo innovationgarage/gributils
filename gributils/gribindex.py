@@ -44,13 +44,13 @@ class GribIndex(object):
                 parametermap = {}
                 with open(parametermap_file) as f:
                     for row in csv.DictReader(f):
-                        parametermap[int(row["parameter"])] = (row["name"], row["unit"])
+                        parametermap[str(row["parameter"])] = (row["name"], row["unit"])
                 return parametermap
         return {}
                     
     def add_file(self, filepath):
         parametermap = self.load_parametermap(filepath)
-        
+
         self.cur.execute("SELECT count(*) FROM gribfiles WHERE file = %s",
                      (filepath,))
         if self.cur.fetchone()[0] > 0:
@@ -65,9 +65,17 @@ class GribIndex(object):
                 layer_idx = grb_idx + 1
                 parameter_name = grb.parameterName
                 parameter_unit = grb.parameterUnits
-                if grb.parameterName in parametermap:
+                
+                if "parameterNumber" in grb.keys():
+                    if str(grb.parameterNumber) in parametermap:
+                        parameter_name, parameter_unit = parametermap[str(grb.parameterNumber)]
+                    elif "parameterCategory" in grb.keys():
+                        parameter_code = "{}.{}".format(grb['parameterCategory'], grb['parameterNumber'])
+                    if parameter_code in parametermap:
+                        parameter_name, parameter_unit = parametermap[parameter_code]
+                elif grb.parameterName in parametermap:
                     parameter_name, parameter_unit = parametermap[grb.parameterName]
-              
+                
                 measurementid = "%s,%s,%s,%s" % (parameter_name, parameter_unit, grb.typeOfLevel, grb.level)
                 gridid, poly = self.extract_polygons(grb)
 
