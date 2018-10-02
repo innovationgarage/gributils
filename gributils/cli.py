@@ -44,7 +44,7 @@ def add_file(ctx, **kw):
         return str(item)
     ctx.obj["index"].add_file(**kw)
 
-def show_error(ctx, err):
+def show_error(err):
     print(err)
     
 @index.command()
