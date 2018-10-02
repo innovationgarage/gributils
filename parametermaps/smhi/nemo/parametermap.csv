@@ -5,7 +5,7 @@ T Temperature Deg C,Temperature,C
 U U-component of Wind m/s,U component of wind,m s-1
 34,V component of wind,m s-1
 V V-component of Wind m/s,V component of wind,m s-1
-40,Z-component of velocity (geometric),m s-1
+40,Z component of velocity (geometric),m s-1
 49,U component of current,cm s-1
 UCUE U-comp of Current cm/s,U component of current,cm s-1
 50,V component of current,cm s-1
