@@ -1,7 +1,4 @@
 # gributils
-Utils on top of pygrib for extracting metadata and manipulating grib files.
-
-# gributils
 gributils is a set of utilities on top of pygrib for manipulating and
 indexing gribfiles. Current features include:
 
