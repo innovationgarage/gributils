@@ -3,7 +3,7 @@
 import setuptools
 
 setuptools.setup(name='gributils',
-      version='0.1',
+      version='0.2',
       description='Utils on top of pygrib for extracting metadata and manipulating grib files',
       author='Egil Moeller',
       author_email='egil@innovationgarage.no',
