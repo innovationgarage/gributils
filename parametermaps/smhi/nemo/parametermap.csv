@@ -1,0 +1,31 @@
+parameter,name,unit
+11,Temperature,C
+T Temperature Deg C,Temperature,C
+33,U component of wind,m s-1
+U U-component of Wind m/s,U component of wind,m s-1
+34,V component of wind,m s-1
+V V-component of Wind m/s,V component of wind,m s-1
+40,Z component of velocity (geometric),m s-1
+49,U component of current,cm s-1
+UCUE U-comp of Current cm/s,U component of current,cm s-1
+50,V component of current,cm s-1
+VCUR V-comp of Current cm/s,V component of current,cm s-1
+82,Deviation of sea level from mean,cm
+ZLEV Deviation of sea level from mean cm,Deviation of sea level from mean,cm
+88,Salinity,psu
+S Salinity psu,Salinity,psu
+91,Ice Cover,Fraction
+ICEC Ice Cover Fraction,Ice Cover,Fraction
+92,Total ice thickness,m
+ICETK Total ice thickness m,Total ice thickness,m
+95,U component of ice drift,cm s-1
+UICE U-component of ice drift cm/s,U component of ice drift,cm s-1
+96,V component of ice drift,cm s-1
+VICE V-component of ice drift cm/s,V component of ice drift,cm s-1
+200,Turbulent Kinetic Energy,J kg-1
+201,Dissipation rate of TKE,W kg-1
+
+
+
+
+

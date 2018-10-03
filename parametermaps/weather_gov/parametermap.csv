@@ -1,0 +1,28 @@
+parameter,name,unit
+0.0,Temperature,K
+0.6,Dew point Temperature,K
+6.1,Sky,%
+2.1,Wind Speed,m s-1
+2.0,Wind Direction,Degree
+0.5,Wave Height,m
+1.192,Weather,
+0.193,Apparent Temperature,K
+1.1,Relative Humidity,%
+2.22,Wind Gust,m s-1
+19.217,Hazards,
+4.2,Haines Index,
+19.194,Convective Hazard Outlook,
+192.192,Fire Wx Critical and Extremely Critical Areas,
+192.194,Fire Wx Critical Areas for Dry Thunderstorms,
+19.236,Tropical Cyclone Storm Surge Threat,
+19.238,Tropical Cyclone Flooding Rain Threat,
+19.239,Tropical Cyclone Tornado Threat,
+19.235,Tropical Cyclone Wind Threat,
+19.197,Probability of Tornado,%
+19.198,Probability of Hail,%
+19.199,Probability of Damaging Winds,%
+19.200,Probability of Extreme Tornado,%
+19.201,Probability of Extreme Hail,%
+19.202,Probability of Extreme Damaging Winds,%
+19.203,Total Probability of Severe Thunderstorms,%
+19.204,Total Probability of Extreme Severe Thunderstorms,%
