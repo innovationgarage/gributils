@@ -87,9 +87,9 @@ class GribIndex(object):
                                  VALUES (%s, %s, %s, %s, %s)
                                  ON CONFLICT DO NOTHING""",
                             (measurementid, parameter_name, parameter_unit, grb.typeOfLevel, grb.level))
-
-                self.cur.execute("INSERT INTO griblayers (file, layeridx, measurementid, timestamp, gridid) VALUES (%s, %s, %s, %s, %s)",
-                            (filepath, layer_idx, measurementid, grb.validDate, gridid))
+                print(layer_idx, grb.analDate, grb.validDate)
+                self.cur.execute("INSERT INTO griblayers (file, layeridx, measurementid, analdate, validdate, gridid) VALUES (%s, %s, %s, %s, %s, %s)",
+                            (filepath, layer_idx, measurementid, grb.analDate, grb.validDate, gridid))
 
         self.cur.execute("COMMIT")
 
@@ -107,13 +107,13 @@ class GribIndex(object):
         if timestamp is not None:
             if timestamp_last_before:
                 filters.append("""
-                  griblayers.timestamp < %(timestamp)s
+                  griblayers.validdate < %(timestamp)s
                   and (select count(*)
                        from griblayers as g2
                        where
                          g2.measurementid = gridlayers.measurementid
                          and g2.gridid = gridlayers.gridid
-                         and g2.timestamp > gridlayers.timestamp
+                         and g2.validdate > gridlayers.validdate
                       ) = 0
                 """)
             else:
@@ -157,12 +157,14 @@ class GribIndex(object):
               select
                 griblayers.file,
                 griblayers.layeridx,
-                griblayers.timestamp
+                griblayers.analdate,
+                griblayers.validdate
               %s
               group by
                 griblayers.file,
                 griblayers.layeridx,
-                griblayers.timestamp
+                griblayers.analdate,
+                griblayers.validdate
             """ % sql
         elif output == "names":
             sql = """
