@@ -32,8 +32,22 @@ def lookup(ctx, **kw):
             return item.strftime("%Y-%m-%d %H:%M:%S")
         return str(item)
     for result in ctx.obj["index"].lookup(**kw):
-        print(", ".join(mangle(item) for item in result))
-
+        print(result)
+    
+@index.command()
+@click.option('--gribfile', type=str)
+@click.option('--layeridx', type=str)
+@click.option('--lat', type=float)
+@click.option('--lon', type=float)
+@click.pass_context
+def lookup_value(ctx, **kw):
+    def mangle(item):
+        if hasattr(item, 'strftime'):
+            return item.strftime("%Y-%m-%d %H:%M:%S")
+        return str(item)
+    for result in ctx.obj["index"].lookup_value(**kw):
+        print(result)
+    
 @index.command()
 @click.option("--filepath", type=str)
 @click.pass_context
@@ -57,3 +71,9 @@ def add_dir(ctx, **kw):
         return str(item)
     ctx.obj["index"].add_dir(**kw, cb=show_error)
     
+
+
+"""
+gributils index --database="$DATABASE" lookup layers --parameter-name="Temperature" --timestamp="2018-08-30 00:04:00" 
+gributils index --database="$DATABASE" lookup-value --gribfile "/home/saghar/IG/projects/gributils/data/smhi/arome/AM25H2_201808300600+000H00M.grib" --layeridx 13 --lat 60. --lon 0.
+"""

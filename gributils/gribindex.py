@@ -6,6 +6,7 @@ import shapely.geometry
 import shapely.ops
 import shapely.affinity
 import scipy.ndimage.morphology
+from scipy import interpolate
 import skimage.measure
 import numpy as np
 import json
@@ -14,12 +15,13 @@ import functools
 import hashlib
 import gributils.bounds
 import csv
+from datetime import datetime
 
 class GribIndex(object):
     def __init__(self, db_connect_string):
         self.conn = psycopg2.connect(db_connect_string)
         self.cur = self.conn.cursor()
-
+        
     def extract_polygons(self, layer):
         shape = gributils.bounds.bounds(layer)
         return gributils.bounds.polygon_id(shape), shape
@@ -97,7 +99,7 @@ class GribIndex(object):
                lat=None, lon=None, timestamp=None, parameter_name=None, parameter_unit=None, type_of_level=None, level=None,
                timestamp_last_before=True, level_highest_below=True):
         """Return a set of griblayers matching the specified requirements"""
-
+        
         args = dict(lat=lat, lon=lon, timestamp=timestamp,
                     parameter_name=parameter_name, parameter_unit=parameter_unit,
                     type_of_level=type_of_level, level=level)
@@ -107,17 +109,26 @@ class GribIndex(object):
         if timestamp is not None:
             if timestamp_last_before:
                 filters.append("""
-                  griblayers.validdate < %(timestamp)s
+                  griblayers.validdate <= %(timestamp)s
                   and (select count(*)
                        from griblayers as g2
                        where
-                         g2.measurementid = gridlayers.measurementid
-                         and g2.gridid = gridlayers.gridid
-                         and g2.validdate > gridlayers.validdate
+                         g2.measurementid = griblayers.measurementid
+                         and g2.gridid = griblayers.gridid
+                         and g2.validdate > griblayers.validdate
                       ) = 0
                 """)
             else:
-                pass
+                filters.append("""
+                  griblayers.validdate >= %(timestamp)s
+                  and (select count(*)
+                       from griblayers as g2
+                       where
+                         g2.measurementid = griblayers.measurementid
+                         and g2.gridid = griblayers.gridid
+                         and g2.validdate < griblayers.validdate
+                      ) = 0
+                """)
         if parameter_name is not None:
             filters.append("measurement.parameterName = %(parameter_name)s")
         if parameter_unit is not None:
@@ -200,6 +211,27 @@ class GribIndex(object):
             """ % sql
         else:
             raise Exception("Unknown output. Available outputs are layers, names, units, level-types, levels")
-            
+
         self.cur.execute(sql, args)
         return self.cur
+
+    def find_new_value(self, layer, point):
+        data = layer.data()
+        x = data[2][0,:]
+        y = data[1][:,0]
+        z = data[0]
+        f = interpolate.interp2d(x, y, z, kind='cubic')        
+        xnew, ynew = point
+        return f(xnew, ynew)
+    
+    def lookup_value(self,
+                     gribfile=None, layeridx=None,
+                     lat=None, lon=None):
+        try:
+            layer = pygrib.open(gribfile)[int(layeridx)]
+            new_value = self.find_new_value(layer, (lat, lon))
+            return new_value
+        except:
+            print('No such file!')
+            return None
+
