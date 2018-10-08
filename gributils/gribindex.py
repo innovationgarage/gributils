@@ -97,7 +97,7 @@ class GribIndex(object):
 
     def lookup(self, output="layers",
                lat=None, lon=None, timestamp=None, parameter_name=None, parameter_unit=None, type_of_level=None, level=None,
-               timestamp_last_before=True, level_highest_below=True):
+               timestamp_last_before=1, level_highest_below=True):
         """Return a set of griblayers matching the specified requirements"""
         
         args = dict(lat=lat, lon=lon, timestamp=timestamp,
@@ -107,27 +107,13 @@ class GribIndex(object):
         if lat is not None and lon is not None:
             filters.append("st_contains(gridareas.the_geom, ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326))")
         if timestamp is not None:
-            if timestamp_last_before:
+            if timestamp_last_before==1:
                 filters.append("""
-                  griblayers.validdate <= %(timestamp)s
-                  and (select count(*)
-                       from griblayers as g2
-                       where
-                         g2.measurementid = griblayers.measurementid
-                         and g2.gridid = griblayers.gridid
-                         and g2.validdate > griblayers.validdate
-                      ) = 0
+                  griblayers.validdate < %(timestamp)s
                 """)
             else:
                 filters.append("""
-                  griblayers.validdate >= %(timestamp)s
-                  and (select count(*)
-                       from griblayers as g2
-                       where
-                         g2.measurementid = griblayers.measurementid
-                         and g2.gridid = griblayers.gridid
-                         and g2.validdate < griblayers.validdate
-                      ) = 0
+                  griblayers.validdate > %(timestamp)s
                 """)
         if parameter_name is not None:
             filters.append("measurement.parameterName = %(parameter_name)s")
@@ -215,7 +201,7 @@ class GribIndex(object):
         self.cur.execute(sql, args)
         return self.cur
 
-    def find_new_value(self, layer, point):
+    def interp_latlon(self, layer, point):
         data = layer.data()
         x = data[2][0,:]
         y = data[1][:,0]
@@ -229,9 +215,44 @@ class GribIndex(object):
                      lat=None, lon=None):
         try:
             layer = pygrib.open(gribfile)[int(layeridx)]
-            new_value = self.find_new_value(layer, (lat, lon))
+            new_value = self.interp_latlon(layer, (lat, lon))
             return new_value
         except:
             print('No such file!')
             return None
 
+    def interp_timestamp(self, lat=None, lon=None, timestamp=None,
+                         parameter_name=None, parameter_unit=None,
+                         type_of_level=None, level=None,
+                         timestamp_last_before=1, level_highest_below=True):
+        layer_last_before =  self.lookup(output="layers",
+                                         lat=lat, lon=lon, timestamp=timestamp,
+                                         parameter_name=parameter_name, parameter_unit=parameter_unit,
+                                         type_of_level=type_of_level, level=level,
+                                         timestamp_last_before=1, level_highest_below=True).fetchall()[-1]
+        
+        layer_first_after =  self.lookup(output="layers",
+                                         lat=lat, lon=lon, timestamp=timestamp,
+                                         parameter_name=parameter_name, parameter_unit=parameter_unit,
+                                         type_of_level=type_of_level, level=level,
+                                         timestamp_last_before=0, level_highest_below=True).fetchone()
+
+        data_last_before = pygrib.open(layer_last_before[0])[int(layer_last_before[1])]
+        data_first_after = pygrib.open(layer_first_after[0])[int(layer_first_after[1])]
+
+        try:
+            parameter_last_before = self.interp_latlon(data_last_before, (lat, lon))[0]
+            parameter_first_after = self.interp_latlon(data_first_after, (lat, lon))[0]
+
+        except:
+            print('No LAt/Lon?')
+            return None
+        
+        timestamp_last_before = int(layer_last_before[3].strftime("%s"))
+        timestamp_first_after = int(layer_first_after[3].strftime("%s"))
+
+        x = np.array([timestamp_last_before, timestamp_first_after])
+        y = np.array([parameter_last_before, parameter_first_after])
+        f = interpolate.interp1d(x, y)
+
+        return f(int(timestamp.strftime("%s")))
