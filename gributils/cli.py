@@ -1,3 +1,10 @@
+"""
+Usage samples:
+gributils index --database="$DATABASE" lookup layers --parameter-name="Temperature" --timestamp="2018-08-30 00:04:00" 
+gributils index --database="$DATABASE" interp-latlon --gribfile "/home/saghar/IG/projects/gributils/data/smhi/arome/AM25H2_201808300600+000H00M.grib" --layeridx 13 --lat 60. --lon 0.
+gributils index --database="$DATABASE" interp-timestamp --parameter-name="Temperature" --timestamp "2018-09-12 08:00:00" --lat 60 --lon 30
+"""
+
 import click
 import click_datetime
 import gributils.gribindex
@@ -40,12 +47,12 @@ def lookup(ctx, **kw):
 @click.option('--lat', type=float)
 @click.option('--lon', type=float)
 @click.pass_context
-def lookup_value(ctx, **kw):
+def interp_latlon(ctx, **kw):
     def mangle(item):
         if hasattr(item, 'strftime'):
             return item.strftime("%Y-%m-%d %H:%M:%S")
         return str(item)
-    for result in ctx.obj["index"].lookup_value(**kw):
+    for result in ctx.obj["index"].interp_latlon(**kw):
         print(result)
 
 @index.command()
@@ -90,7 +97,3 @@ def add_dir(ctx, **kw):
     
 
 
-"""
-gributils index --database="$DATABASE" lookup layers --parameter-name="Temperature" --timestamp="2018-08-30 00:04:00" 
-gributils index --database="$DATABASE" lookup-value --gribfile "/home/saghar/IG/projects/gributils/data/smhi/arome/AM25H2_201808300600+000H00M.grib" --layeridx 13 --lat 60. --lon 0.
-"""

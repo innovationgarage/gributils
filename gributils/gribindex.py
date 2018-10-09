@@ -201,7 +201,7 @@ class GribIndex(object):
         self.cur.execute(sql, args)
         return self.cur
 
-    def interp_latlon(self, layer, point):
+    def interp(self, layer, point):
         data = layer.data()
         x = data[2][0,:]
         y = data[1][:,0]
@@ -210,12 +210,13 @@ class GribIndex(object):
         xnew, ynew = point
         return f(xnew, ynew)
     
-    def lookup_value(self,
+    def interp_latlon(self,
                      gribfile=None, layeridx=None,
                      lat=None, lon=None):
+
         try:
             layer = pygrib.open(gribfile)[int(layeridx)]
-            new_value = self.interp_latlon(layer, (lat, lon))
+            new_value = self.interp(layer, (lat, lon))
             return new_value
         except:
             print('No such file!')
@@ -241,9 +242,8 @@ class GribIndex(object):
         data_first_after = pygrib.open(layer_first_after[0])[int(layer_first_after[1])]
 
         try:
-            parameter_last_before = self.interp_latlon(data_last_before, (lat, lon))[0]
-            parameter_first_after = self.interp_latlon(data_first_after, (lat, lon))[0]
-
+            parameter_last_before = self.interp(data_last_before, (lat, lon))[0]
+            parameter_first_after = self.interp(data_first_after, (lat, lon))[0]
         except:
             print('No LAt/Lon?')
             return None
