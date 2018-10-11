@@ -1,5 +1,7 @@
 """
 Usage samples:
+gributils index --database="$DATABASE" add-file --filepath="/home/saghar/IG/projects/gributils/data/smhi/arome/AM25H2_201808300600+000H00M.grib"
+gributils index --database="$DATABASE" add-dir --basedir="/home/saghar/IG/projects/gributils/data/smhi/arome" 1>&2
 gributils index --database="$DATABASE" lookup layers --parameter-name="Temperature" --timestamp="2018-08-30 00:04:00" 
 gributils index --database="$DATABASE" interp-latlon --gribfile "/home/saghar/IG/projects/gributils/data/smhi/arome/AM25H2_201808300600+000H00M.grib" --layeridx 13 --lat 60. --lon 0.
 gributils index --database="$DATABASE" interp-timestamp --parameter-name="Temperature" --timestamp "2018-09-12 08:00:00" --lat 60 --lon 30
@@ -74,6 +76,7 @@ def interp_timestamp(ctx, **kw):
         
 @index.command()
 @click.option("--filepath", type=str)
+#@click.option("--add-buffer", type=float)
 @click.pass_context
 def add_file(ctx, **kw):
     def mangle(item):

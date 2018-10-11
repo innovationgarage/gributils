@@ -10,7 +10,7 @@ import functools
 import hashlib
 import gributils.projection
 
-def bounds(layer, fill_holes=True, simplify=0.01):
+def bounds(layer, fill_holes=True, simplify=0.01, add_buffer=0.3):
     """Extracts a shapely.geometry.MultiPolygon object representing all
     areas with valid values in a grib file layer. Valid values are
     defined as grid cells with a value >= layer.minimum and <=
@@ -48,8 +48,11 @@ def bounds(layer, fill_holes=True, simplify=0.01):
     validshape = split_dateline(validshape)
     validshape = unwrap_dateline(validshape)
 
+    if add_buffer:
+        validshape = validshape.buffer(add_buffer)
     if simplify is not False:
         validshape = validshape.simplify(simplify)
+
 
     return validshape
 
