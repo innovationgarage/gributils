@@ -89,7 +89,7 @@ class GribIndex(object):
                                  VALUES (%s, %s, %s, %s, %s)
                                  ON CONFLICT DO NOTHING""",
                             (measurementid, parameter_name, parameter_unit, grb.typeOfLevel, grb.level))
-                print(layer_idx, grb.analDate, grb.validDate)
+
                 self.cur.execute("INSERT INTO griblayers (file, layeridx, measurementid, analdate, validdate, gridid) VALUES (%s, %s, %s, %s, %s, %s)",
                             (filepath, layer_idx, measurementid, grb.analDate, grb.validDate, gridid))
 
@@ -109,11 +109,27 @@ class GribIndex(object):
         if timestamp is not None:
             if timestamp_last_before==1:
                 filters.append("""
-                  griblayers.validdate < %(timestamp)s
+                  griblayers.validdate <= %(timestamp)s
+                  and (select count(*)
+                       from griblayers as g2
+                       where
+                         g2.measurementid = griblayers.measurementid
+                         and g2.gridid = griblayers.gridid
+                         and g2.validdate > griblayers.validdate
+                         and g2.validdate <= %(timestamp)s
+                      ) = 0
                 """)
             else:
                 filters.append("""
-                  griblayers.validdate > %(timestamp)s
+                  griblayers.validdate >= %(timestamp)s
+                  and (select count(*)
+                       from griblayers as g2
+                       where
+                         g2.measurementid = griblayers.measurementid
+                         and g2.gridid = griblayers.gridid
+                         and g2.validdate < griblayers.validdate
+                         and g2.validdate >= %(timestamp)s
+                      ) = 0
                 """)
         if parameter_name is not None:
             filters.append("measurement.parameterName = %(parameter_name)s")
@@ -256,3 +272,11 @@ class GribIndex(object):
         f = interpolate.interp1d(x, y)
 
         return f(int(timestamp.strftime("%s")))
+
+    def find_most_similar_gridarea(self, area_id):
+        self.execute("SELECT ST_HausdorffDistance(a.the_geom, b.the_geom) FROM gridareas AS a, gridareas AS b WHERE a.cartodb_id=%d;",
+                     (area_id,))
+        if self.cur.fetchone():
+            print("")
+            return
+        print("%s INDEX" % filepath)        
