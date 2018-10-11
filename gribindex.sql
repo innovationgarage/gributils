@@ -1,7 +1,10 @@
 create table gridareas (
     the_geom public.geometry(Geometry,4326),
     projparams text,
-    gridid character varying primary key
+    gridid character varying primary key,
+    is_reference boolean,    
+    closest_geom_id integer,
+    hausdorffdistance_to_closest_geom float
 );
 create table gribfiles (
  file varchar primary key
