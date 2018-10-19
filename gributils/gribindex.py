@@ -50,7 +50,7 @@ class GribIndex(object):
                 return parametermap
         return {}
                     
-    def add_file(self, filepath):
+    def add_file(self, filepath, threshold=0.5):
         parametermap = self.load_parametermap(filepath)
 
         self.cur.execute("SELECT count(*) FROM gribfiles WHERE file = %s",
@@ -84,6 +84,25 @@ class GribIndex(object):
                 self.cur.execute("INSERT INTO gridareas (gridid, projparams, the_geom) VALUES (%s, %s, st_geomfromtext(%s, 4326)) ON CONFLICT DO NOTHING",
                             (gridid, json.dumps(grb.projparams), poly.wkt))
 
+                # ##HERE!! cartodb_id is not set yet, what should I do?! Stalled for now FIXME later
+                # self.cur.execute("""SELECT
+                #                       a.cartodb_id, b.cartodb_id, ST_HausdorffDistance(a.the_geom, b.the_geom)
+                #                     FROM
+                #                       gridareas AS a, gridareas AS b
+                #                     WHERE
+                #                       a.cartodb_id = VALUES (%s)
+                #                       and b.cartodb_id <> a.cartodb_id
+                #                       and ST_HausdorffDistance(a.the_geom, b.the_geom) < VALUES (%s)
+                #                       and a.is_reference IS NULL
+                #                       and (SELECT count(*) 
+                #                            FROM gridareas AS c
+                #                            WHERE
+                #                              ST_HausdorffDistance(a.the_geom, c.the_geom)<ST_HausdorffDistance(a.the_geom, b.the_geom)
+                #                              and c.cartodb_id <> b.cartodb_id
+                #                              and c.cartodb_id <> a.cartodb_id
+                #                           )=0""",
+                #                  (cartodb_id, threshold))
+                
                 self.cur.execute("""INSERT
                                  INTO measurement (measurementid, parameterName, parameterUnit, typeOfLevel, level)
                                  VALUES (%s, %s, %s, %s, %s)
@@ -242,11 +261,14 @@ class GribIndex(object):
                          parameter_name=None, parameter_unit=None,
                          type_of_level=None, level=None,
                          timestamp_last_before=1, level_highest_below=True):
+        
+        #FIXME! properly handle the scenario with more (or less) than one hit for eaither lst_before or first_after layers
+        
         layer_last_before =  self.lookup(output="layers",
                                          lat=lat, lon=lon, timestamp=timestamp,
                                          parameter_name=parameter_name, parameter_unit=parameter_unit,
                                          type_of_level=type_of_level, level=level,
-                                         timestamp_last_before=1, level_highest_below=True).fetchall()[-1]
+                                         timestamp_last_before=1, level_highest_below=True).fetchone()
         
         layer_first_after =  self.lookup(output="layers",
                                          lat=lat, lon=lon, timestamp=timestamp,
@@ -254,29 +276,23 @@ class GribIndex(object):
                                          type_of_level=type_of_level, level=level,
                                          timestamp_last_before=0, level_highest_below=True).fetchone()
 
-        data_last_before = pygrib.open(layer_last_before[0])[int(layer_last_before[1])]
-        data_first_after = pygrib.open(layer_first_after[0])[int(layer_first_after[1])]
-
-        try:
+        try:        
+            data_last_before = pygrib.open(layer_last_before[0])[int(layer_last_before[1])]
+            data_first_after = pygrib.open(layer_first_after[0])[int(layer_first_after[1])]
+            
+            timestamp_last_before = int(layer_last_before[3].strftime("%s"))
+            timestamp_first_after = int(layer_first_after[3].strftime("%s"))
+            
             parameter_last_before = self.interp(data_last_before, (lat, lon))[0]
             parameter_first_after = self.interp(data_first_after, (lat, lon))[0]
-        except:
-            print('No LAt/Lon?')
-            return None
         
-        timestamp_last_before = int(layer_last_before[3].strftime("%s"))
-        timestamp_first_after = int(layer_first_after[3].strftime("%s"))
+            x = np.array([timestamp_last_before, timestamp_first_after])
+            y = np.array([parameter_last_before, parameter_first_after])
+            f = interpolate.interp1d(x, y)
+        except:
+            return None
 
-        x = np.array([timestamp_last_before, timestamp_first_after])
-        y = np.array([parameter_last_before, parameter_first_after])
-        f = interpolate.interp1d(x, y)
+        ts = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+        return f(int(ts.strftime("%s")))
 
-        return f(int(timestamp.strftime("%s")))
-
-    def find_most_similar_gridarea(self, area_id):
-        self.execute("SELECT ST_HausdorffDistance(a.the_geom, b.the_geom) FROM gridareas AS a, gridareas AS b WHERE a.cartodb_id=%d;",
-                     (area_id,))
-        if self.cur.fetchone():
-            print("")
-            return
-        print("%s INDEX" % filepath)        
+        
