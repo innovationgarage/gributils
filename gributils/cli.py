@@ -41,8 +41,9 @@ def lookup(ctx, **kw):
         if hasattr(item, 'strftime'):
             return item.strftime("%Y-%m-%d %H:%M:%S")
         return str(item)
-    for result in ctx.obj["index"].lookup(**kw):
-        print(result)
+    print(ctx.obj["index"].lookup(**kw))
+    # for result in ctx.obj["index"].lookup(**kw):
+    #     print(result)
     
 @index.command()
 @click.option('--gribfile', type=str)

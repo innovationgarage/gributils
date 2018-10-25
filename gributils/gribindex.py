@@ -124,32 +124,32 @@ class GribIndex(object):
                     type_of_level=type_of_level, level=level)
         filters = []
         if lat is not None and lon is not None:
-            filters.append("st_contains(gridareas.the_geom, ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326))")
+            filters.append("gridareas.is_reference='t' and st_contains(gridareas.the_geom, ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326))")
         if timestamp is not None:
             if timestamp_last_before==1:
                 filters.append("""
-                  griblayers.validdate <= %(timestamp)s
-                  and (select count(*)
-                       from griblayers as g2
-                       where
-                         g2.measurementid = griblayers.measurementid
-                         and g2.gridid = griblayers.gridid
-                         and g2.validdate > griblayers.validdate
-                         and g2.validdate <= %(timestamp)s
-                      ) = 0
-                """)
+                  griblayers.validdate <= %(timestamp)s""")
+                #   and (select count(*)
+                #        from griblayers as g2
+                #        where
+                #          g2.measurementid = griblayers.measurementid
+                #          and g2.gridid = griblayers.gridid
+                #          and g2.validdate > griblayers.validdate
+                #          and g2.validdate <= %(timestamp)s
+                #       ) = 0
+                # """)
             else:
                 filters.append("""
-                  griblayers.validdate >= %(timestamp)s
-                  and (select count(*)
-                       from griblayers as g2
-                       where
-                         g2.measurementid = griblayers.measurementid
-                         and g2.gridid = griblayers.gridid
-                         and g2.validdate < griblayers.validdate
-                         and g2.validdate >= %(timestamp)s
-                      ) = 0
-                """)
+                  griblayers.validdate >= %(timestamp)s""")
+                #   and (select count(*)
+                #        from griblayers as g2
+                #        where
+                #          g2.measurementid = griblayers.measurementid
+                #          and g2.gridid = griblayers.gridid
+                #          and g2.validdate < griblayers.validdate
+                #          and g2.validdate >= %(timestamp)s
+                #       ) = 0
+                # """)
         if parameter_name is not None:
             filters.append("measurement.parameterName = %(parameter_name)s")
         if parameter_unit is not None:
@@ -197,6 +197,8 @@ class GribIndex(object):
                 griblayers.layeridx,
                 griblayers.analdate,
                 griblayers.validdate
+             order by
+                griblayers.validdate
             """ % sql
         elif output == "names":
             sql = """
@@ -233,8 +235,20 @@ class GribIndex(object):
         else:
             raise Exception("Unknown output. Available outputs are layers, names, units, level-types, levels")
 
-        self.cur.execute(sql, args)
-        return self.cur
+        print(sql)
+        try:
+            self.cur.execute(sql, args)
+            if timestamp_last_before==1:
+                res = self.cur.fetchall()
+                if res:
+                    return res[-1]
+                else:
+                    return None
+            else:
+                return self.cur.fetchone()
+        except:
+            return None
+#        return self.cur
 
     def interp(self, layer, point):
         data = layer.data()
@@ -261,22 +275,21 @@ class GribIndex(object):
                          parameter_name=None, parameter_unit=None,
                          type_of_level=None, level=None,
                          timestamp_last_before=1, level_highest_below=True):
-        
+
         #FIXME! properly handle the scenario with more (or less) than one hit for eaither lst_before or first_after layers
-        
         layer_last_before =  self.lookup(output="layers",
                                          lat=lat, lon=lon, timestamp=timestamp,
                                          parameter_name=parameter_name, parameter_unit=parameter_unit,
                                          type_of_level=type_of_level, level=level,
-                                         timestamp_last_before=1, level_highest_below=True).fetchone()
+                                         timestamp_last_before=1, level_highest_below=True)
         
         layer_first_after =  self.lookup(output="layers",
                                          lat=lat, lon=lon, timestamp=timestamp,
                                          parameter_name=parameter_name, parameter_unit=parameter_unit,
                                          type_of_level=type_of_level, level=level,
-                                         timestamp_last_before=0, level_highest_below=True).fetchone()
+                                         timestamp_last_before=0, level_highest_below=True)
 
-        try:        
+        if layer_last_before and layer_first_after:
             data_last_before = pygrib.open(layer_last_before[0])[int(layer_last_before[1])]
             data_first_after = pygrib.open(layer_first_after[0])[int(layer_first_after[1])]
             
@@ -285,14 +298,22 @@ class GribIndex(object):
             
             parameter_last_before = self.interp(data_last_before, (lat, lon))[0]
             parameter_first_after = self.interp(data_first_after, (lat, lon))[0]
-        
+            
             x = np.array([timestamp_last_before, timestamp_first_after])
             y = np.array([parameter_last_before, parameter_first_after])
             f = interpolate.interp1d(x, y)
-        except:
+        
+            if isinstance(timestamp, str):
+                try:
+                    ts = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
+                except:
+                    ts = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+            else:
+                ts = timestamp
+                
+            return f(int(ts.strftime("%s")))            
+        else:
             return None
-
-        ts = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-        return f(int(ts.strftime("%s")))
+            
 
         
