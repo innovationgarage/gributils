@@ -235,7 +235,6 @@ class GribIndex(object):
         else:
             raise Exception("Unknown output. Available outputs are layers, names, units, level-types, levels")
 
-        print(sql)
         try:
             self.cur.execute(sql, args)
             if timestamp_last_before==1:
