@@ -29,13 +29,13 @@ indexing gribfiles. Current features include:
       install_requires=[
           'numpy',
           'pyproj',
-          'pygrib==2.0.2',
+          'pygrib',
           'shapely',
           'scipy',
           'scikit-image',
           'click',
           'click-datetime',
-          'psycopg2'
+          'requests'
       ],
       include_package_data=True,
       entry_points='''

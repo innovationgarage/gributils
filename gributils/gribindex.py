@@ -16,15 +16,143 @@ import hashlib
 import gributils.bounds
 import csv
 from datetime import datetime
+import requests
 
 class GribIndex(object):
-    def __init__(self, db_connect_string):
-        self.conn = psycopg2.connect(db_connect_string)
-        self.cur = self.conn.cursor()
+    def __init__(self, es_url):
+        self.es_url = es_url
         
     def extract_polygons(self, layer):
         shape = gributils.bounds.bounds(layer)
         return gributils.bounds.polygon_id(shape), shape
+
+    def init_db(self):
+        requests.put("%s/geocloud-gribfile-grid" % self.es_url,
+                      json={
+                          "mappings": {
+                              "doc": {
+                                  "properties": {
+                                      "polygon": {
+                                          "type": "geo_shape",
+                                          "strategy": "recursive"
+                                      }
+                                  }
+                              }
+                          }
+                      }).raise_for_status()
+
+        requests.put("%s/geocloud-gribfile-layer" % self.es_url,
+                      json={
+                          "mappings": {
+                              "doc": {
+                                  "properties": {
+                                  }
+                              }
+                          }
+                      }).raise_for_status()
+    
+    def get_grids_for_position(self, lat, lon):
+        res = requests.post("%s/geocloud-gribfile-grid" % self.es_url,
+                      json={
+                          "_source": ["gridid"],
+                          "query":{
+                              "bool": {
+                                  "must": {
+                                      "match_all": {}
+                                  },
+                                  "filter": {
+                                      "geo_shape": {
+                                          "polygon": {
+                                              "shape": {
+                                                  "type": "point",
+                                                  "coordinates": [lat, lon]
+                                              },
+                                              "relation": "contains"
+                                          }
+                                      }
+                                  }
+                              }
+                          }
+                      })
+        res.raise_for_status()
+        return [item["_source"]["gridid"] for item in res.json()["hits"]["hits"]]
+        
+    def get_grid_for_layer(self, grb):
+        gridid, poly = self.extract_polygons(grb)
+
+        res = requests.post("%s/geocloud-gribfile-grid/_search" % self.es_url,
+                      json={"query": {"bool": {"must": {"match": {"gridid": gridid}}}}})
+        res.raise_for_status()
+
+        if res.json()["hits"]["total"] == 0:
+            print(repr({
+                "gridid": gridid,
+                "projparams": grb.projparams,
+                "polygon": poly.wkt}))
+            res = requests.post("%s/geocloud-gribfile-grid/doc" % self.es_url, json = {
+                "gridid": gridid,
+                "projparams": grb.projparams,
+                "polygon": poly.wkt})
+            res.raise_for_status()
+
+        return gridid
+    
+    def add_layer(self, grb, url, idx):
+        gridid = self.get_grid_for_layer(grb)
+
+        parameter_name, parameter_unit = self.map_parameter(url, grb)
+
+        res = requests.post("%s/geocloud-gribfile-layer/doc" % self.es_url, json = {
+            "gridid": gridid,
+
+            "parameterName": parameter_name,
+            "parameterUnit": parameter_unit,
+            "typeOfLevel": grb.typeOfLevel,
+            "level": grb.level,
+
+            "validDate": grb.validDate.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "analDate": grb.analDate.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+
+            "url": url,
+            "idx": idx
+        })
+        res.raise_for_status()    
+
+    def map_parameter(self, filepath, grb):
+        parametermap = self.load_parametermap(filepath)
+        parameter_name = grb.parameterName
+        parameter_unit = grb.parameterUnits
+
+        if "parameterNumber" in grb.keys():
+            if str(grb.parameterNumber) in parametermap:
+                parameter_name, parameter_unit = parametermap[str(grb.parameterNumber)]
+            elif "parameterCategory" in grb.keys():
+                parameter_code = "{}.{}".format(grb['parameterCategory'], grb['parameterNumber'])
+            if parameter_code in parametermap:
+                parameter_name, parameter_unit = parametermap[parameter_code]
+        elif grb.parameterName in parametermap:
+            parameter_name, parameter_unit = parametermap[grb.parameterName]
+
+        return parameter_name, parameter_unit
+
+    def load_parametermap(self, filepath):
+        for parametermap_file in (filepath + ".parametermap.csv",
+                                  os.path.join(os.path.dirname(filepath), "parametermap.csv")):
+            if os.path.exists(parametermap_file):
+                parametermap = {}
+                with open(parametermap_file) as f:
+                    for row in csv.DictReader(f):
+                        parametermap[str(row["parameter"])] = (row["name"], row["unit"])
+                return parametermap
+        return {}
+                    
+    def add_file(self, filepath, threshold=0.5):
+        print("Adding file", filepath)
+        with pygrib.open(filepath) as grbs:
+            for grb_idx, grb in enumerate(grbs):
+                # layer indexes start at 1
+                print("Adding layer", grb_idx)
+                self.add_layer(grb, filepath, grb_idx + 1)
 
     def add_dir(self, basedir, cb):
         for root, dirs, files in os.walk(basedir):
@@ -39,85 +167,19 @@ class GribIndex(object):
                         "error": e
                         })
 
-    def load_parametermap(self, filepath):
-        for parametermap_file in (filepath + ".parametermap.csv",
-                                  os.path.join(os.path.dirname(filepath), "parametermap.csv")):
-            if os.path.exists(parametermap_file):
-                parametermap = {}
-                with open(parametermap_file) as f:
-                    for row in csv.DictReader(f):
-                        parametermap[str(row["parameter"])] = (row["name"], row["unit"])
-                return parametermap
-        return {}
-                    
-    def add_file(self, filepath, threshold=0.5):
-        parametermap = self.load_parametermap(filepath)
-
-        self.cur.execute("SELECT count(*) FROM gribfiles WHERE file = %s",
-                     (filepath,))
-        if self.cur.fetchone()[0] > 0:
-            print("%s IGNORE" % filepath)
-            return
-        print("%s INDEX" % filepath)
-        self.cur.execute("INSERT INTO gribfiles (file) VALUES (%s)",
-                     (filepath,))
-        with pygrib.open(filepath) as grbs:
-            for grb_idx, grb in enumerate(grbs):
-                # layer indexes start at 1
-                layer_idx = grb_idx + 1
-                parameter_name = grb.parameterName
-                parameter_unit = grb.parameterUnits
-                
-                if "parameterNumber" in grb.keys():
-                    if str(grb.parameterNumber) in parametermap:
-                        parameter_name, parameter_unit = parametermap[str(grb.parameterNumber)]
-                    elif "parameterCategory" in grb.keys():
-                        parameter_code = "{}.{}".format(grb['parameterCategory'], grb['parameterNumber'])
-                    if parameter_code in parametermap:
-                        parameter_name, parameter_unit = parametermap[parameter_code]
-                elif grb.parameterName in parametermap:
-                    parameter_name, parameter_unit = parametermap[grb.parameterName]
-                
-                measurementid = "%s,%s,%s,%s" % (parameter_name, parameter_unit, grb.typeOfLevel, grb.level)
-                gridid, poly = self.extract_polygons(grb)
-
-                self.cur.execute("INSERT INTO gridareas (gridid, projparams, the_geom) VALUES (%s, %s, st_geomfromtext(%s, 4326)) ON CONFLICT DO NOTHING",
-                            (gridid, json.dumps(grb.projparams), poly.wkt))
-
-                # ##HERE!! cartodb_id is not set yet, what should I do?! Stalled for now FIXME later
-                # self.cur.execute("""SELECT
-                #                       a.cartodb_id, b.cartodb_id, ST_HausdorffDistance(a.the_geom, b.the_geom)
-                #                     FROM
-                #                       gridareas AS a, gridareas AS b
-                #                     WHERE
-                #                       a.cartodb_id = VALUES (%s)
-                #                       and b.cartodb_id <> a.cartodb_id
-                #                       and ST_HausdorffDistance(a.the_geom, b.the_geom) < VALUES (%s)
-                #                       and a.is_reference IS NULL
-                #                       and (SELECT count(*) 
-                #                            FROM gridareas AS c
-                #                            WHERE
-                #                              ST_HausdorffDistance(a.the_geom, c.the_geom)<ST_HausdorffDistance(a.the_geom, b.the_geom)
-                #                              and c.cartodb_id <> b.cartodb_id
-                #                              and c.cartodb_id <> a.cartodb_id
-                #                           )=0""",
-                #                  (cartodb_id, threshold))
-                
-                self.cur.execute("""INSERT
-                                 INTO measurement (measurementid, parameterName, parameterUnit, typeOfLevel, level)
-                                 VALUES (%s, %s, %s, %s, %s)
-                                 ON CONFLICT DO NOTHING""",
-                            (measurementid, parameter_name, parameter_unit, grb.typeOfLevel, grb.level))
-
-                self.cur.execute("INSERT INTO griblayers (file, layeridx, measurementid, analdate, validdate, gridid) VALUES (%s, %s, %s, %s, %s, %s)",
-                            (filepath, layer_idx, measurementid, grb.analDate, grb.validDate, gridid))
-
-        self.cur.execute("COMMIT")
-
     def lookup(self, output="layers",
                lat=None, lon=None, timestamp=None, parameter_name=None, parameter_unit=None, type_of_level=None, level=None,
                timestamp_last_before=1, level_highest_below=True):
         """Return a set of griblayers matching the specified requirements"""
+
+        if lat is not None:
+            assert lon is not None, "lat and lon must both be set, or must both be left unset"
+            
+            gridids = self.get_grids_for_position(lat, lon)
+
+
+            
+
         
         args = dict(lat=lat, lon=lon, timestamp=timestamp,
                     parameter_name=parameter_name, parameter_unit=parameter_unit,
