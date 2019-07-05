@@ -89,7 +89,7 @@ class GribIndex(object):
         res.raise_for_status()
 
         if res.json()["hits"]["total"] == 0:
-            print(repr({
+            print("INSERT NEW GRID", repr({
                 "gridid": gridid,
                 "projparams": grb.projparams,
                 "polygon": poly.wkt}))
@@ -103,27 +103,6 @@ class GribIndex(object):
         
         return gridid
     
-    def add_layer(self, grb, url, idx):
-        gridid = self.get_grid_for_layer(grb)
-
-        parameter_name, parameter_unit = self.map_parameter(url, grb)
-
-        res = requests.post("%s/geocloud-gribfile-layer/doc" % self.es_url, json = {
-            "gridid": gridid,
-
-            "parameterName": parameter_name,
-            "parameterUnit": parameter_unit,
-            "typeOfLevel": grb.typeOfLevel,
-            "level": grb.level,
-
-            "validDate": grb.validDate.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-            "analDate": grb.analDate.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-
-            "url": url,
-            "idx": idx
-        })
-        res.raise_for_status()    
-
     def map_parameter(self, filepath, grb):
         parametermap = self.load_parametermap(filepath)
         parameter_name = grb.parameterName
@@ -151,15 +130,47 @@ class GribIndex(object):
                         parametermap[str(row["parameter"])] = (row["name"], row["unit"])
                 return parametermap
         return {}
-                    
+
+    def add_layer(self, grb, url, idx):
+        res = requests.post("%s/geocloud-gribfile-layer/doc" % self.es_url,
+                            json = self.format_layer(grb, url, idx))
+        res.raise_for_status()
+
+    def format_layer(self, grb, url, idx):
+        gridid = self.get_grid_for_layer(grb)
+
+        parameter_name, parameter_unit = self.map_parameter(url, grb)
+
+        return {
+            "gridid": gridid,
+
+            "parameterName": parameter_name,
+            "parameterUnit": parameter_unit,
+            "typeOfLevel": grb.typeOfLevel,
+            "level": grb.level,
+
+            "validDate": grb.validDate.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "analDate": grb.analDate.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+
+            "url": url,
+            "idx": idx
+        }
+    
     def add_file(self, filepath, threshold=0.5):
         print("Adding file", filepath)
         with pygrib.open(filepath) as grbs:
-            for grb_idx, grb in enumerate(grbs):
-                # layer indexes start at 1
-                print("Adding layer", grb_idx)
-                self.add_layer(grb, filepath, grb_idx + 1)
-
+            layers = [self.format_layer(grb, filepath, grb_idx)
+                      for grb_idx, grb in enumerate(grbs)]
+        data = "".join(
+            json.dumps({"index": {"_index": "geocloud-gribfile-layer", "_type":"doc"}}) + "\n" +
+            json.dumps(layer) + "\n"
+            for layer in layers)
+        res = requests.post("%s/_bulk" % self.es_url,
+                            data = data,
+                            headers = {'Content-Type': 'application/json'})
+        res.raise_for_status()
+        assert not res.json()["errors"], repr(res.json())
+            
     def add_dir(self, basedir, cb):
         for root, dirs, files in os.walk(basedir):
             for filename in files:
