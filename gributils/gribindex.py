@@ -21,6 +21,7 @@ import requests
 class GribIndex(object):
     def __init__(self, es_url):
         self.es_url = es_url
+        self.gridcache = set()
         
     def extract_polygons(self, layer):
         shape = gributils.bounds.bounds(layer)
@@ -79,6 +80,9 @@ class GribIndex(object):
         
     def get_grid_for_layer(self, grb):
         gridid, poly = self.extract_polygons(grb)
+        if gridid in self.gridcache:
+            return gridid
+        print("Cache miss for", gridid)
 
         res = requests.post("%s/geocloud-gribfile-grid/_search" % self.es_url,
                       json={"query": {"bool": {"must": {"match": {"gridid": gridid}}}}})
@@ -95,6 +99,8 @@ class GribIndex(object):
                 "polygon": poly.wkt})
             res.raise_for_status()
 
+        self.gridcache.add(gridid)
+        
         return gridid
     
     def add_layer(self, grb, url, idx):
