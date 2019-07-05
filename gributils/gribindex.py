@@ -33,6 +33,8 @@ class GribIndex(object):
                           "mappings": {
                               "doc": {
                                   "properties": {
+                                      "gridid": {"type": "keyword"},
+                                      "projparams": {"type": "object"},
                                       "polygon": {
                                           "type": "geo_shape",
                                           "strategy": "recursive"
@@ -47,6 +49,18 @@ class GribIndex(object):
                           "mappings": {
                               "doc": {
                                   "properties": {
+                                      "gridid": {"type": "keyword"},
+
+                                      "parameterName": {"type": "keyword"},
+                                      "parameterUnit": {"type": "keyword"},
+                                      "typeOfLevel": {"type": "keyword"},
+                                      "level": {"type": "double"},
+
+                                      "validDate": {"type": "date"},
+                                      "analDate": {"type": "date"},
+
+                                      "url": {"type": "keyword"},
+                                      "idx": {"type": "integer"}                                      
                                   }
                               }
                           }
@@ -189,144 +203,89 @@ class GribIndex(object):
                timestamp_last_before=1, level_highest_below=True):
         """Return a set of griblayers matching the specified requirements"""
 
+        aggregation = None
+        
+        if output == "layers":
+            pass
+        elif output == "names":
+            aggregation = {"terms": {"field": "parameterName"}}
+        elif output == "units":
+            aggregation = {"terms": {"field": "parameterUnit"}}
+        elif output == "level-types":
+            aggregation = {"terms": {"field": "typeOfLevel"}}
+        elif output == "levels":
+            aggregation = {"terms": {"field": "level"}}
+        else:
+            raise Exception("Unknown output. Available outputs are layers, names, units, level-types, levels")
+
         if lat is not None:
             assert lon is not None, "lat and lon must both be set, or must both be left unset"
             
             gridids = self.get_grids_for_position(lat, lon)
 
-
-            
-
-        
-        args = dict(lat=lat, lon=lon, timestamp=timestamp,
-                    parameter_name=parameter_name, parameter_unit=parameter_unit,
-                    type_of_level=type_of_level, level=level)
         filters = []
         if lat is not None and lon is not None:
-            filters.append("gridareas.is_reference='t' and st_contains(gridareas.the_geom, ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326))")
+            filters.append({
+                "terms": {
+                    "gridid": gridids
+                }
+            })
+
         if timestamp is not None:
-            if timestamp_last_before==1:
-                filters.append("""
-                  griblayers.validdate <= %(timestamp)s""")
-                #   and (select count(*)
-                #        from griblayers as g2
-                #        where
-                #          g2.measurementid = griblayers.measurementid
-                #          and g2.gridid = griblayers.gridid
-                #          and g2.validdate > griblayers.validdate
-                #          and g2.validdate <= %(timestamp)s
-                #       ) = 0
-                # """)
-            else:
-                filters.append("""
-                  griblayers.validdate >= %(timestamp)s""")
-                #   and (select count(*)
-                #        from griblayers as g2
-                #        where
-                #          g2.measurementid = griblayers.measurementid
-                #          and g2.gridid = griblayers.gridid
-                #          and g2.validdate < griblayers.validdate
-                #          and g2.validdate >= %(timestamp)s
-                #       ) = 0
-                # """)
+            filters.append({
+                "range" : {
+                    "validDate" : {
+                        ["gte", "lte"][not not timestamp_last_before]: timestamp
+                    }
+                }
+            })
         if parameter_name is not None:
-            filters.append("measurement.parameterName = %(parameter_name)s")
+            filters.append({"term": {"parameterName": parameter_name}})
         if parameter_unit is not None:
-            filters.append("measurement.parameterUnit = %(parameter_unit)s")
+            filters.append({"term": {"parameterUnit": parameter_unit}})
         if type_of_level is not None:
-            filters.append("measurement.typeOfLevel = %(type_of_level)s")
+            filters.append({"term": {"typeOfLevel": type_of_level}})
         if level is not None:
-            if level_highest_below:
-                filters.append("""
-                  measurement.level < %(level)s
-                  and (select count(*)
-                       from measurement as m2
-                       where
-                         m2.parameterName = measurement.parameterName
-                         and m2.parameterUnit = measurement.parameterUnit
-                         and m2.typeOfLevel = measurement.typeOfLevel
-                         and m2.level > measurement.level
-                      ) = 0
-                """)
-            else:
-                pass
+            filters.append({
+                "range" : {
+                    "level" : {
+                        ["gte", "lte"][not not level_highest_below]: timestamp
+                    }
+                }
+            })
 
-        sql = """
-          from
-            griblayers
-            join measurement on 
-              griblayers.measurementid = measurement.measurementid
-            join gridareas on
-              griblayers.gridid = gridareas.gridid
-        """
+        if not filters:
+            filters = {"match_all": {}}
 
-        if filters:
-            sql += " where " + "\n and ".join(filters)
-
-        if output == "layers":
-            sql = """
-              select
-                griblayers.file,
-                griblayers.layeridx,
-                griblayers.analdate,
-                griblayers.validdate
-              %s
-              group by
-                griblayers.file,
-                griblayers.layeridx,
-                griblayers.analdate,
-                griblayers.validdate
-             order by
-                griblayers.validdate
-            """ % sql
-        elif output == "names":
-            sql = """
-              select
-                measurement.parameterName
-              %s
-              group by
-                measurement.parameterName
-            """ % sql
-        elif output == "units":
-            sql = """
-              select
-                measurement.parameterUnit
-              %s
-              group by
-                measurement.parameterUnit
-            """ % sql
-        elif output == "level-types":
-            sql = """
-              select
-                measurement.typeOfLevel
-              %s
-              group by
-                measurement.typeOfLevel
-            """ % sql
-        elif output == "levels":
-            sql = """
-              select
-                measurement.level
-              %s
-              group by
-                measurement.level
-            """ % sql
+        if aggregation:
+            query = {
+                "aggs" : {
+                    "results": {
+                        "filter": {"bool": {"must": filters}},
+                        "aggs": {
+                            "results": aggregation
+                        }
+                    }
+                },
+                "size": 0
+            }
         else:
-            raise Exception("Unknown output. Available outputs are layers, names, units, level-types, levels")
-
-        try:
-            self.cur.execute(sql, args)
-            if timestamp_last_before==1:
-                res = self.cur.fetchall()
-                if res:
-                    return res[-1]
-                else:
-                    return None
-            else:
-                return self.cur.fetchone()
-        except:
-            return None
-#        return self.cur
+            query = {
+                "query": {
+                    "bool": {"must": filters}
+                }
+            }
+        
+        res = requests.post("%s/geocloud-gribfile-layer/_search" % self.es_url,
+                      json=query)
+        res.raise_for_status()
+        res = res.json()
+        
+        if aggregation is not None:
+            res = res["aggregations"]["results"]["results"]["buckets"]
+        else:
+            res = res["hits"]["hits"]
+        return res
 
     def interp(self, layer, point):
         data = layer.data()

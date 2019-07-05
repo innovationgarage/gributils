@@ -25,8 +25,13 @@ def index(ctx, database, **kw):
     ctx.obj['index'] = gributils.gribindex.GribIndex(database)
     
 @index.command()
+@click.pass_context
+def initialize(ctx, **kw):
+    ctx.obj["index"].init_db(**kw)
+
+@index.command()
 @click.argument("output", type=click.Choice(['layers', 'names', 'units', 'level-types', 'levels']))
-@click.option('--timestamp', type=click_datetime.Datetime(format='%Y-%m-%d %H:%M:%S'), default=None)
+@click.option('--timestamp', type=click_datetime.Datetime(format='%Y-%m-%dT%H:%M:%S.%fZ'), default=None)
 @click.option('--timestamp-last-before', type=int)
 @click.option('--parameter-name')
 @click.option('--parameter-unit')
@@ -39,7 +44,7 @@ def index(ctx, database, **kw):
 def lookup(ctx, **kw):
     def mangle(item):
         if hasattr(item, 'strftime'):
-            return item.strftime("%Y-%m-%d %H:%M:%S")
+            return item.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         return str(item)
     print(ctx.obj["index"].lookup(**kw))
     # for result in ctx.obj["index"].lookup(**kw):
