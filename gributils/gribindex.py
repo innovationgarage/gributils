@@ -21,12 +21,25 @@ class GribIndex(object):
     def __init__(self, es_url):
         self.es_url = es_url
         self.gridcache = set()
+        self.parametermapcache = {}
         
     def extract_polygons(self, layer):
         shape = gributils.bounds.bounds(layer)
         return gributils.bounds.polygon_id(shape), shape
 
     def init_db(self):
+        requests.put("%s/geocloud-gribfile-parametermap" % self.es_url,
+                      json={
+                          "mappings": {
+                              "doc": {
+                                  "properties": {
+                                      "name": {"type": "keyword"},
+                                      "mapping": {"type": "object"}
+                                  }
+                              }
+                          }
+                      }).raise_for_status()
+        
         requests.put("%s/geocloud-gribfile-grid" % self.es_url,
                       json={
                           "mappings": {
@@ -64,9 +77,34 @@ class GribIndex(object):
                               }
                           }
                       }).raise_for_status()
-    
+
+    def add_parametermap(self, name, mapping):
+        parametermap = {}
+        with open(mapping) as f:
+            for row in csv.DictReader(f):
+                parametermap[str(row["parameter"])] = (row["name"], row["unit"])
+        
+        requests.post("%s/geocloud-gribfile-parametermap/doc" % self.es_url, json = {
+            "name": name,
+            "mapping": parametermap}).raise_for_status()
+
+    def get_parametermaps(self):
+        res = requests.post("%s/geocloud-gribfile-parametermap/_search" % self.es_url,
+                      json={
+                          "_source": ["name"],
+                          "query":{
+                              "bool": {
+                                  "must": {
+                                      "match_all": {}
+                                  }
+                              }
+                          }
+                      })
+        res.raise_for_status()
+        return [item["_source"]["name"] for item in res.json()["hits"]["hits"]]
+        
     def get_grids_for_position(self, lat, lon):
-        res = requests.post("%s/geocloud-gribfile-grid" % self.es_url,
+        res = requests.post("%s/geocloud-gribfile-grid/_search" % self.es_url,
                       json={
                           "_source": ["gridid"],
                           "query":{
@@ -116,8 +154,8 @@ class GribIndex(object):
         
         return gridid
     
-    def map_parameter(self, filepath, grb):
-        parametermap = self.load_parametermap(filepath)
+    def map_parameter(self, filepath, grb, **kw):
+        parametermap = self.load_parametermap(filepath, **kw)
         parameter_name = grb.parameterName
         parameter_unit = grb.parameterUnits
 
@@ -133,26 +171,31 @@ class GribIndex(object):
 
         return parameter_name, parameter_unit
 
-    def load_parametermap(self, filepath):
-        for parametermap_file in (filepath + ".parametermap.csv",
-                                  os.path.join(os.path.dirname(filepath), "parametermap.csv")):
-            if os.path.exists(parametermap_file):
-                parametermap = {}
-                with open(parametermap_file) as f:
-                    for row in csv.DictReader(f):
-                        parametermap[str(row["parameter"])] = (row["name"], row["unit"])
-                return parametermap
-        return {}
+    def load_parametermap(self, filepath, parametermap=None, **kw):
+        if parametermap is None:
+            parametermap = os.path.basename(os.path.dirname(filepath))
 
-    def add_layer(self, grb, url, idx):
+        if parametermap not in self.parametermapcache:
+            res = requests.post("%s/geocloud-gribfile-parametermap/_search" % self.es_url,
+                          json={"query":{"bool": {"must": {"term": {"name": parametermap}}}}})
+            res.raise_for_status()
+            res = res.json()["hits"]["hits"]
+            if len(res):
+                self.parametermapcache[parametermap] = res[0]["_source"]["mapping"]                
+            else:
+                self.parametermapcache[parametermap] = {}
+                
+        return self.parametermapcache[parametermap]
+    
+    def add_layer(self, grb, url, idx, **kw):
         res = requests.post("%s/geocloud-gribfile-layer/doc" % self.es_url,
-                            json = self.format_layer(grb, url, idx))
+                            json = self.format_layer(grb, url, idx, **kw))
         res.raise_for_status()
 
-    def format_layer(self, grb, url, idx):
+    def format_layer(self, grb, url, idx, **kw):
         gridid = self.get_grid_for_layer(grb)
 
-        parameter_name, parameter_unit = self.map_parameter(url, grb)
+        parameter_name, parameter_unit = self.map_parameter(url, grb, **kw)
 
         return {
             "gridid": gridid,
@@ -169,10 +212,10 @@ class GribIndex(object):
             "idx": idx
         }
     
-    def add_file(self, filepath, threshold=0.5):
+    def add_file(self, filepath, **kw):
         print("Adding file", filepath)
         with pygrib.open(filepath) as grbs:
-            layers = [self.format_layer(grb, filepath, grb_idx)
+            layers = [self.format_layer(grb, filepath, grb_idx, **kw)
                       for grb_idx, grb in enumerate(grbs)]
         data = "".join(
             json.dumps({"index": {"_index": "geocloud-gribfile-layer", "_type":"doc"}}) + "\n" +
@@ -184,13 +227,13 @@ class GribIndex(object):
         res.raise_for_status()
         assert not res.json()["errors"], repr(res.json())
             
-    def add_dir(self, basedir, cb):
+    def add_dir(self, basedir, cb, **kw):
         for root, dirs, files in os.walk(basedir):
             for filename in files:
                 if not (filename.endswith(".grib") or filename.endswith(".grb")): continue
                 filepath = os.path.abspath(os.path.join(root, filename))
                 try:
-                    self.add_file(filepath)
+                    self.add_file(filepath, **kw)
                 except Exception as e:
                     cb({
                         "file": filepath,

@@ -88,7 +88,7 @@ def interp_timestamp(ctx, **kw):
         
 @index.command()
 @click.option("--filepath", type=str)
-#@click.option("--add-buffer", type=float)
+@click.option("--parametermap", type=str)
 @click.pass_context
 def add_file(ctx, **kw):
     def mangle(item):
@@ -102,6 +102,7 @@ def show_error(err):
     
 @index.command()
 @click.option("--basedir", type=str)
+@click.option("--parametermap", type=str)
 @click.pass_context
 def add_dir(ctx, **kw):
     def mangle(item):
@@ -110,5 +111,22 @@ def add_dir(ctx, **kw):
         return str(item)
     ctx.obj["index"].add_dir(**kw, cb=show_error)
     
+@index.group()
+@click.pass_context
+def parametermap(ctx, **kw):
+    pass
+
+@parametermap.command()
+@click.option("--name", type=str)
+@click.option("--mapping", type=str)
+@click.pass_context
+def add(ctx, **kw):
+    ctx.obj["index"].add_parametermap(**kw)
+
+@parametermap.command()
+@click.pass_context
+def list(ctx, **kw):
+    for name in ctx.obj["index"].get_parametermaps(**kw):
+        print(name)
 
 
