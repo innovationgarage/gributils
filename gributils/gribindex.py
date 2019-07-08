@@ -1,7 +1,6 @@
 import os
 import sys
 import pygrib
-import psycopg2
 import shapely.geometry
 import shapely.ops
 import shapely.affinity
@@ -235,10 +234,30 @@ class GribIndex(object):
             filters.append({
                 "range" : {
                     "validDate" : {
-                        ["gte", "lte"][not not timestamp_last_before]: timestamp
+                        ["gte", "lte"][not not timestamp_last_before]: timestamp.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
                     }
                 }
             })
+            if aggregation is None:
+                aggregation = {
+                    "terms": {
+                        "script" : {
+                            "source": "doc.parameterName + \"-\" + doc.parameterUnit + \"-\" + doc.typeOfLevel + \"-\" + doc.level",
+                            "lang": "painless"
+                        },
+                        "size": 100000
+                    },
+                    "aggs": {
+                        "results": {
+                            "top_hits": {
+                                "sort": [
+                                    {"validDate": {"order": ["asc", "desc"][not not timestamp_last_before]}}
+                                ],
+                                "size" : 1
+                            }
+                        }
+                    }
+                }
         if parameter_name is not None:
             filters.append({"term": {"parameterName": parameter_name}})
         if parameter_unit is not None:
@@ -247,12 +266,12 @@ class GribIndex(object):
             filters.append({"term": {"typeOfLevel": type_of_level}})
         if level is not None:
             filters.append({
-                "range" : {
-                    "level" : {
-                        ["gte", "lte"][not not level_highest_below]: timestamp
+                "range": {
+                    "level": {
+                        ["gte", "lte"][not not level_highest_below]: level
                     }
                 }
-            })
+            })            
 
         if not filters:
             filters = {"match_all": {}}
@@ -273,16 +292,23 @@ class GribIndex(object):
             query = {
                 "query": {
                     "bool": {"must": filters}
-                }
+                },
+                "size": 10000
             }
-        
+
+        #print(json.dumps(query, indent=2))
+            
         res = requests.post("%s/geocloud-gribfile-layer/_search" % self.es_url,
                       json=query)
         res.raise_for_status()
         res = res.json()
-        
+
         if aggregation is not None:
             res = res["aggregations"]["results"]["results"]["buckets"]
+            if res and "results" in res[0]:
+                res = [subentry
+                       for entry in res
+                       for subentry in entry["results"]["hits"]["hits"]]
         else:
             res = res["hits"]["hits"]
         return res

@@ -11,6 +11,7 @@ gributils index --database="$DATABASE" interp-timestamp --parameter-name="Temper
 import click
 import click_datetime
 import gributils.gribindex
+import json
 
 @click.group()
 @click.pass_context
@@ -40,13 +41,17 @@ def initialize(ctx, **kw):
 @click.option('--level-highest-below', is_flag=True)
 @click.option('--lat', type=float)
 @click.option('--lon', type=float)
+@click.option('--pretty', is_flag=True)
 @click.pass_context
 def lookup(ctx, **kw):
+    pretty = kw.pop("pretty", False)
     def mangle(item):
         if hasattr(item, 'strftime'):
             return item.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         return str(item)
-    print(ctx.obj["index"].lookup(**kw))
+    for row in ctx.obj["index"].lookup(**kw):
+        print(json.dumps(row, indent=[None, 2][pretty]))
+    
     # for result in ctx.obj["index"].lookup(**kw):
     #     print(result)
     
