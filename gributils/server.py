@@ -43,13 +43,13 @@ def lookup():
             json.dumps(row) + "\n"
             for row in index.lookup(**args))
     
-@app.route('/index/add')
+@app.route('/index/add', methods=["POST"])
 def add_file():
-    parametermap = request.args.get("parametermap", None)
     filename = os.path.join(filearea, "%s.grb" % (uuid.uuid4(),))
     with open(filename, "wb") as f:
-        f.write(request.data)
-    index.add_file(filenamem, parametermap = parametermap)
+        f.write(request.get_data())
+    parametermap = request.args.get("parametermap", None)
+    index.add_file(filename, parametermap = parametermap)
     return json.dumps({"status": "success"})
 
 if __name__ == "__main__":
