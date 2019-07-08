@@ -78,8 +78,7 @@ def lookup(ctx, **kw):
 @click.option('--lon', type=float)
 @click.pass_context
 def interp_latlon(ctx, **kw):
-    for result in ctx.obj["index"].interp_latlon(**kw):
-        print(result)
+    print(ctx.obj["index"].interp_latlon(**kw))
 
 @index.command()
 @click.option('--timestamp', type=click_datetime.Datetime(format='%Y-%m-%d %H:%M:%S'), default=None)

@@ -361,9 +361,9 @@ class GribIndex(object):
         x = data[2][0,:]
         y = data[1][:,0]
         z = data[0]
-        f = interpolate.interp2d(x, y, z, kind='cubic')        
+        f = interpolate.interp2d(x, y, z, kind='cubic')
         xnew, ynew = point
-        return f(xnew, ynew)
+        return f(xnew, ynew)[0]
     
     def interp_latlon(self,
                      gribfile=None, layeridx=None,
@@ -373,8 +373,8 @@ class GribIndex(object):
             layer = pygrib.open(gribfile)[int(layeridx)]
             new_value = self.interp(layer, (lat, lon))
             return new_value
-        except:
-            print('No such file!')
+        except Exception as e:
+            print('Unable to load layer:', e)
             return None
 
     def interp_timestamp(self, lat=None, lon=None, timestamp=None,

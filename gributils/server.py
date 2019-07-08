@@ -33,8 +33,8 @@ def lookup():
         "lon": (float, None),
         "pretty": (bool, False)
     }
-    args = {name: argtypes[name][0](value) if name in args else argtypes[name][1]
-            for name, value in args.items()}
+    args = {name: argtypes[name][0](args[name]) if name in args else argtypes[name][1]
+            for name in argtypes.keys()}
     
     if pretty:
         return json.dumps(index.lookup(**args), indent=2)
@@ -42,6 +42,19 @@ def lookup():
         return "".join(
             json.dumps(row) + "\n"
             for row in index.lookup(**args))
+
+@app.route('/index/interp-latlon')
+def interp_latlon():
+    args = dict(request.args)
+    argtypes = {
+        'gribfile': (str, None),
+        'layeridx': (int, 1),
+        'lat': (float, None),
+        'lon': (float, None)
+    }
+    args = {name: argtypes[name][0](args[name]) if name in args else argtypes[name][1]
+            for name in argtypes.keys()}
+    return json.dumps(index.interp_latlon(**args))
     
 @app.route('/index/add', methods=["POST"])
 def add_file():
