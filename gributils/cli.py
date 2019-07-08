@@ -11,6 +11,7 @@ gributils index --database="$DATABASE" interp-timestamp --parameter-name="Temper
 import click
 import click_datetime
 import gributils.gribindex
+import gributils.server
 import json
 
 @click.group()
@@ -18,13 +19,29 @@ import json
 def main(ctx, **kw):
     ctx.obj = {}
 
+@main.command()
+@click.option('--database', default="http://localhost:9200")
+@click.option('--filearea', default=".")
+@click.option('--host', default="0.0.0.0")
+@click.option('--port', default=1028)
+@click.pass_context
+def server(ctx, database, filearea, host, port, **kw):
+    gributils.server.filearea = filearea
+    gributils.server.index = gributils.gribindex.GribIndex(database)
+    gributils.server.app.run(host=host, port=port)
+    
 @main.group()
 @click.option('--database')
 @click.pass_context
 def index(ctx, database, **kw):
     ctx.obj = {}
     ctx.obj['index'] = gributils.gribindex.GribIndex(database)
-    
+
+@index.command()
+@click.pass_context
+def initialize(ctx, **kw):
+    ctx.obj["index"].init_db(**kw)
+
 @index.command()
 @click.pass_context
 def initialize(ctx, **kw):
@@ -45,12 +62,11 @@ def initialize(ctx, **kw):
 @click.pass_context
 def lookup(ctx, **kw):
     pretty = kw.pop("pretty", False)
-    def mangle(item):
-        if hasattr(item, 'strftime'):
-            return item.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        return str(item)
-    for row in ctx.obj["index"].lookup(**kw):
-        print(json.dumps(row, indent=[None, 2][pretty]))
+    if pretty:
+        print(json.dumps(ctx.obj["index"].lookup(**kw), indent=2))
+    else:
+        for row in ctx.obj["index"].lookup(**kw):
+            print(json.dumps(row))
     
     # for result in ctx.obj["index"].lookup(**kw):
     #     print(result)
@@ -62,10 +78,6 @@ def lookup(ctx, **kw):
 @click.option('--lon', type=float)
 @click.pass_context
 def interp_latlon(ctx, **kw):
-    def mangle(item):
-        if hasattr(item, 'strftime'):
-            return item.strftime("%Y-%m-%d %H:%M:%S")
-        return str(item)
     for result in ctx.obj["index"].interp_latlon(**kw):
         print(result)
 
@@ -80,10 +92,6 @@ def interp_latlon(ctx, **kw):
 @click.option('--lon', type=float)
 @click.pass_context
 def interp_timestamp(ctx, **kw):
-    def mangle(item):
-        if hasattr(item, 'strftime'):
-            return item.strftime("%Y-%m-%d %H:%M:%S")
-        return str(item)
     print(ctx.obj["index"].interp_timestamp(**kw))
         
 @index.command()
@@ -91,10 +99,6 @@ def interp_timestamp(ctx, **kw):
 @click.option("--parametermap", type=str)
 @click.pass_context
 def add_file(ctx, **kw):
-    def mangle(item):
-        if hasattr(item, 'strftime'):
-            return item.strftime("%Y-%m-%d %H:%M:%S")
-        return str(item)
     ctx.obj["index"].add_file(**kw)
 
 def show_error(err):
@@ -105,10 +109,6 @@ def show_error(err):
 @click.option("--parametermap", type=str)
 @click.pass_context
 def add_dir(ctx, **kw):
-    def mangle(item):
-        if hasattr(item, 'strftime'):
-            return item.strftime("%Y-%m-%d %H:%M:%S")
-        return str(item)
     ctx.obj["index"].add_dir(**kw, cb=show_error)
     
 @index.group()
