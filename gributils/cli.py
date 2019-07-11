@@ -62,15 +62,28 @@ def initialize(ctx, **kw):
 @click.pass_context
 def lookup(ctx, **kw):
     pretty = kw.pop("pretty", False)
+    res = ctx.obj["index"].lookup(**kw)
     if pretty:
-        print(json.dumps(ctx.obj["index"].lookup(**kw), indent=2))
+        print(json.dumps(res, indent=2))
     else:
-        for row in ctx.obj["index"].lookup(**kw):
+        for row in res:
             print(json.dumps(row))
     
     # for result in ctx.obj["index"].lookup(**kw):
     #     print(result)
     
+@index.command()
+@click.option('--pretty', is_flag=True)
+@click.pass_context
+def bboxes(ctx, **kw):
+    pretty = kw.pop("pretty", False)
+    res = ctx.obj["index"].get_grid_bboxes(**kw)
+    if pretty:
+        print(json.dumps(res, indent=2))
+    else:
+        for row in res:
+            print(json.dumps(row))
+
 @index.command()
 @click.option('--gribfile', type=str)
 @click.option('--layeridx', type=str)

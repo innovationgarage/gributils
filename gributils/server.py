@@ -73,6 +73,7 @@ def interp_timestamp():
     }
     args = {name.replace("-", "_"): argtypes[name][0](args[name]) if name in args else argtypes[name][1]
             for name in argtypes.keys()}
+    val = index.interp_timestamp(**args)
     return json.dumps(index.interp_timestamp(**args))
 
 @app.route('/index/add', methods=["POST"])

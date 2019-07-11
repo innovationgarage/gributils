@@ -4,6 +4,7 @@ import pygrib
 import shapely.geometry
 import shapely.ops
 import shapely.affinity
+import shapely.wkt
 import scipy.ndimage.morphology
 from scipy import interpolate
 import skimage.measure
@@ -17,6 +18,13 @@ import csv
 from datetime import datetime
 import requests
 
+def check_result(res):
+    try:
+        res.raise_for_status()
+        return res
+    except Exception as e:
+        raise Exception("%s: %s" % (e, res.content))
+
 class GribIndex(object):
     def __init__(self, es_url):
         self.es_url = es_url
@@ -28,55 +36,58 @@ class GribIndex(object):
         return gributils.bounds.polygon_id(shape), shape
 
     def init_db(self):
-        requests.put("%s/geocloud-gribfile-parametermap" % self.es_url,
-                      json={
-                          "mappings": {
-                              "doc": {
-                                  "properties": {
-                                      "name": {"type": "keyword"},
-                                      "mapping": {"type": "object"}
-                                  }
-                              }
-                          }
-                      }).raise_for_status()
+        check_result(
+            requests.put("%s/geocloud-gribfile-parametermap" % self.es_url,
+                         json={
+                             "mappings": {
+                                 "doc": {
+                                     "properties": {
+                                         "name": {"type": "keyword"},
+                                         "mapping": {"type": "object"}
+                                     }
+                                 }
+                             }
+                         }))
         
-        requests.put("%s/geocloud-gribfile-grid" % self.es_url,
-                      json={
-                          "mappings": {
-                              "doc": {
-                                  "properties": {
-                                      "gridid": {"type": "keyword"},
-                                      "projparams": {"type": "object"},
-                                      "polygon": {
-                                          "type": "geo_shape",
-                                          "strategy": "recursive"
-                                      }
-                                  }
-                              }
-                          }
-                      }).raise_for_status()
+        check_result(
+            requests.put("%s/geocloud-gribfile-grid" % self.es_url,
+                         json={
+                             "mappings": {
+                                 "doc": {
+                                     "properties": {
+                                         "gridid": {"type": "keyword"},
+                                         "projparams": {"type": "object"},
+                                         "polygon": {
+                                             "type": "geo_shape",
+                                             "strategy": "recursive"
+                                         }
+                                     }
+                                 }
+                             }
+                         }))
 
-        requests.put("%s/geocloud-gribfile-layer" % self.es_url,
-                      json={
-                          "mappings": {
-                              "doc": {
-                                  "properties": {
-                                      "gridid": {"type": "keyword"},
-
-                                      "parameterName": {"type": "keyword"},
-                                      "parameterUnit": {"type": "keyword"},
-                                      "typeOfLevel": {"type": "keyword"},
-                                      "level": {"type": "double"},
-
-                                      "validDate": {"type": "date"},
-                                      "analDate": {"type": "date"},
-
-                                      "url": {"type": "keyword"},
-                                      "idx": {"type": "integer"}                                      
-                                  }
-                              }
-                          }
-                      }).raise_for_status()
+        check_result(
+            requests.put("%s/geocloud-gribfile-layer" % self.es_url,
+                         json={
+                             "mappings": {
+                                 "doc": {
+                                     "properties": {
+                                         "gridid": {"type": "keyword"},
+                                         
+                                         "parameterName": {"type": "keyword"},
+                                         "parameterUnit": {"type": "keyword"},
+                                         "typeOfLevel": {"type": "keyword"},
+                                         "level": {"type": "double"},
+                                         
+                                         "validDate": {"type": "date"},
+                                         "analDate": {"type": "date"},
+                                         
+                                         "url": {"type": "keyword"},
+                                         "idx": {"type": "integer"}                                      
+                                     }
+                                 }
+                             }
+                         }))
 
     def add_parametermap(self, name, mapping):
         parametermap = {}
@@ -84,49 +95,50 @@ class GribIndex(object):
             for row in csv.DictReader(f):
                 parametermap[str(row["parameter"])] = (row["name"], row["unit"])
         
-        requests.post("%s/geocloud-gribfile-parametermap/doc" % self.es_url, json = {
-            "name": name,
-            "mapping": parametermap}).raise_for_status()
-
+        check_result(
+            requests.post("%s/geocloud-gribfile-parametermap/doc" % self.es_url, json = {
+                "name": name,
+                "mapping": parametermap}))
+            
     def get_parametermaps(self):
-        res = requests.post("%s/geocloud-gribfile-parametermap/_search" % self.es_url,
-                      json={
-                          "_source": ["name"],
-                          "query":{
-                              "bool": {
-                                  "must": {
-                                      "match_all": {}
+        res = check_result(
+            requests.post("%s/geocloud-gribfile-parametermap/_search" % self.es_url,
+                          json={
+                              "_source": ["name"],
+                              "query":{
+                                  "bool": {
+                                      "must": {
+                                          "match_all": {}
+                                      }
                                   }
                               }
-                          }
-                      })
-        res.raise_for_status()
+                          }))
         return [item["_source"]["name"] for item in res.json()["hits"]["hits"]]
         
     def get_grids_for_position(self, lat, lon):
-        res = requests.post("%s/geocloud-gribfile-grid/_search" % self.es_url,
-                      json={
-                          "_source": ["gridid"],
-                          "query":{
-                              "bool": {
-                                  "must": {
-                                      "match_all": {}
-                                  },
-                                  "filter": {
-                                      "geo_shape": {
-                                          "polygon": {
-                                              "shape": {
-                                                  "type": "point",
-                                                  "coordinates": [lat, lon]
-                                              },
-                                              "relation": "contains"
+        res = check_result(
+            requests.post("%s/geocloud-gribfile-grid/_search" % self.es_url,
+                          json={
+                              "_source": ["gridid"],
+                              "query":{
+                                  "bool": {
+                                      "must": {
+                                          "match_all": {}
+                                      },
+                                      "filter": {
+                                          "geo_shape": {
+                                              "polygon": {
+                                                  "shape": {
+                                                      "type": "point",
+                                                      "coordinates": [lon, lat]
+                                                  },
+                                                  "relation": "contains"
+                                              }
                                           }
                                       }
                                   }
                               }
-                          }
-                      })
-        res.raise_for_status()
+                          }))
         return [item["_source"]["gridid"] for item in res.json()["hits"]["hits"]]
         
     def get_grid_for_layer(self, grb):
@@ -135,24 +147,34 @@ class GribIndex(object):
             return gridid
         print("Cache miss for", gridid)
 
-        res = requests.post("%s/geocloud-gribfile-grid/_search" % self.es_url,
-                      json={"query": {"bool": {"must": {"match": {"gridid": gridid}}}}})
-        res.raise_for_status()
+        res = check_result(
+            requests.post("%s/geocloud-gribfile-grid/_search" % self.es_url,
+                          json={"query": {"bool": {"must": {"match": {"gridid": gridid}}}}}))
 
         if res.json()["hits"]["total"] == 0:
             print("INSERT NEW GRID", repr({
                 "gridid": gridid,
                 "projparams": grb.projparams,
                 "polygon": poly.wkt}))
-            res = requests.post("%s/geocloud-gribfile-grid/doc" % self.es_url, json = {
-                "gridid": gridid,
-                "projparams": grb.projparams,
-                "polygon": poly.wkt})
-            res.raise_for_status()
+            res = check_result(
+                requests.post("%s/geocloud-gribfile-grid/doc" % self.es_url, json = {
+                    "gridid": gridid,
+                    "projparams": grb.projparams,
+                    "polygon": poly.wkt}))
 
         self.gridcache.add(gridid)
         
         return gridid
+
+    def get_grid_bboxes(self):
+        res = check_result(
+            requests.post("%s/geocloud-gribfile-grid/_search" % self.es_url,
+                          json={
+                              "query": {"match_all": {}},
+                              "size": 10000
+                          }))
+        return {hit["_source"]["gridid"]: shapely.wkt.loads(hit["_source"]["polygon"]).bounds
+                for hit in res.json()["hits"]["hits"]}
     
     def map_parameter(self, filepath, grb, **kw):
         parametermap = self.load_parametermap(filepath, **kw)
@@ -176,9 +198,9 @@ class GribIndex(object):
             parametermap = os.path.basename(os.path.dirname(filepath))
 
         if parametermap not in self.parametermapcache:
-            res = requests.post("%s/geocloud-gribfile-parametermap/_search" % self.es_url,
-                          json={"query":{"bool": {"must": {"term": {"name": parametermap}}}}})
-            res.raise_for_status()
+            res = check_result(
+                requests.post("%s/geocloud-gribfile-parametermap/_search" % self.es_url,
+                              json={"query":{"bool": {"must": {"term": {"name": parametermap}}}}}))
             res = res.json()["hits"]["hits"]
             if len(res):
                 self.parametermapcache[parametermap] = res[0]["_source"]["mapping"]                
@@ -188,9 +210,9 @@ class GribIndex(object):
         return self.parametermapcache[parametermap]
     
     def add_layer(self, grb, url, idx, **kw):
-        res = requests.post("%s/geocloud-gribfile-layer/doc" % self.es_url,
-                            json = self.format_layer(grb, url, idx, **kw))
-        res.raise_for_status()
+        check_result(
+            requests.post("%s/geocloud-gribfile-layer/doc" % self.es_url,
+                          json = self.format_layer(grb, url, idx, **kw)))
 
     def format_layer(self, grb, url, idx, **kw):
         gridid = self.get_grid_for_layer(grb)
@@ -221,10 +243,10 @@ class GribIndex(object):
             json.dumps({"index": {"_index": "geocloud-gribfile-layer", "_type":"doc"}}) + "\n" +
             json.dumps(layer) + "\n"
             for layer in layers)
-        res = requests.post("%s/_bulk" % self.es_url,
-                            data = data,
-                            headers = {'Content-Type': 'application/json'})
-        res.raise_for_status()
+        res = check_result(
+            requests.post("%s/_bulk" % self.es_url,
+                          data = data,
+                          headers = {'Content-Type': 'application/json'}))
         assert not res.json()["errors"], repr(res.json())
             
     def add_dir(self, basedir, cb, **kw):
@@ -341,19 +363,19 @@ class GribIndex(object):
 
         #print(json.dumps(query, indent=2))
             
-        res = requests.post("%s/geocloud-gribfile-layer/_search" % self.es_url,
-                      json=query)
-        res.raise_for_status()
+        res = check_result(
+            requests.post("%s/geocloud-gribfile-layer/_search" % self.es_url,
+                          json=query))
         res = res.json()
 
         if aggregation is not None:
             res = res["aggregations"]["results"]["results"]["buckets"]
             if res and "results" in res[0]:
-                res = [subentry
+                res = [subentry["_source"]
                        for entry in res
                        for subentry in entry["results"]["hits"]["hits"]]
         else:
-            res = res["hits"]["hits"]
+            res = [item["_source"] for item in res["hits"]["hits"]]
         return res
 
     def interp(self, layer, point):
@@ -396,17 +418,22 @@ class GribIndex(object):
                                          timestamp_last_before=0, level_highest_below=True)
 
         if layer_last_before and layer_first_after:
-            data_last_before = pygrib.open(layer_last_before[0])[int(layer_last_before[1])]
-            data_first_after = pygrib.open(layer_first_after[0])[int(layer_first_after[1])]
+            data_last_before = pygrib.open(layer_last_before[0]["url"])[int(layer_last_before[0]["idx"])]
+            data_first_after = pygrib.open(layer_first_after[0]["url"])[int(layer_first_after[0]["idx"])]
             
-            timestamp_last_before = int(layer_last_before[3].strftime("%s"))
-            timestamp_first_after = int(layer_first_after[3].strftime("%s"))
+            timestamp_last_before = int(datetime.strptime(layer_last_before[0]["validDate"], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%s"))
+            timestamp_first_after = int(datetime.strptime(layer_first_after[0]["validDate"], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%s"))
             
-            parameter_last_before = self.interp(data_last_before, (lat, lon))[0]
-            parameter_first_after = self.interp(data_first_after, (lat, lon))[0]
+            parameter_last_before = self.interp(data_last_before, (lat, lon))
+            parameter_first_after = self.interp(data_first_after, (lat, lon))
+
+            if timestamp_last_before == timestamp_first_after:
+                # Avoid a divide by zero in interp1d...
+                return parameter_last_before
             
             x = np.array([timestamp_last_before, timestamp_first_after])
             y = np.array([parameter_last_before, parameter_first_after])
+            
             f = interpolate.interp1d(x, y)
         
             if isinstance(timestamp, str):
@@ -416,10 +443,7 @@ class GribIndex(object):
                     ts = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
             else:
                 ts = timestamp
-                
-            return f(int(ts.strftime("%s")))            
+
+            return float(f(int(ts.strftime("%s"))))
         else:
             return None
-            
-
-        
