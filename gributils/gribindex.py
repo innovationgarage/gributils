@@ -404,25 +404,19 @@ class GribIndex(object):
                          type_of_level=None, level=None,
                          timestamp_last_before=1, level_highest_below=True):
 
-        #FIXME! properly handle the scenario with more (or less) than one hit for eaither lst_before or first_after layers
-        layer_last_before =  self.lookup(output="layers",
-                                         lat=lat, lon=lon, timestamp=timestamp,
-                                         parameter_name=parameter_name, parameter_unit=parameter_unit,
-                                         type_of_level=type_of_level, level=level,
-                                         timestamp_last_before=1, level_highest_below=True)
-        
-        layer_first_after =  self.lookup(output="layers",
-                                         lat=lat, lon=lon, timestamp=timestamp,
-                                         parameter_name=parameter_name, parameter_unit=parameter_unit,
-                                         type_of_level=type_of_level, level=level,
-                                         timestamp_last_before=0, level_highest_below=True)
+        def to_map(entries):
+            return {
+                (entry["parameterName"], entry["parameterUnit"], entry["typeOfLevel"], entry["level"]): entry
+                for entry in entries}
 
-        if layer_last_before and layer_first_after:
-            data_last_before = pygrib.open(layer_last_before[0]["url"])[int(layer_last_before[0]["idx"])]
-            data_first_after = pygrib.open(layer_first_after[0]["url"])[int(layer_first_after[0]["idx"])]
+        # FIXME: Interpolate along levels too maybe?
+        
+        def interpolate_parameter(layer_last_before, layer_first_after):
+            data_last_before = pygrib.open(layer_last_before["url"])[int(layer_last_before["idx"])]
+            data_first_after = pygrib.open(layer_first_after["url"])[int(layer_first_after["idx"])]
             
-            timestamp_last_before = int(datetime.strptime(layer_last_before[0]["validDate"], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%s"))
-            timestamp_first_after = int(datetime.strptime(layer_first_after[0]["validDate"], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%s"))
+            timestamp_last_before = int(datetime.strptime(layer_last_before["validDate"], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%s"))
+            timestamp_first_after = int(datetime.strptime(layer_first_after["validDate"], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%s"))
             
             parameter_last_before = self.interp(data_last_before, (lat, lon))
             parameter_first_after = self.interp(data_first_after, (lat, lon))
@@ -445,5 +439,24 @@ class GribIndex(object):
                 ts = timestamp
 
             return float(f(int(ts.strftime("%s"))))
-        else:
-            return None
+        
+        layer_last_before =  to_map(
+            self.lookup(output="layers",
+                        lat=lat, lon=lon, timestamp=timestamp,
+                        parameter_name=parameter_name, parameter_unit=parameter_unit,
+                        type_of_level=type_of_level, level=level,
+                        timestamp_last_before=1, level_highest_below=True))
+        
+        layer_first_after =  to_map(
+            self.lookup(output="layers",
+                        lat=lat, lon=lon, timestamp=timestamp,
+                        parameter_name=parameter_name, parameter_unit=parameter_unit,
+                        type_of_level=type_of_level, level=level,
+                        timestamp_last_before=0, level_highest_below=True))
+
+        return [{"parameterName": key[0],
+                 "parameterUnit": key[1],
+                 "typeOfLevel": key[2],
+                 "level": key[3],
+                 "value": interpolate_parameter(layer_last_before[key], layer_first_after[key])}
+                for key in layer_last_before.keys()]
