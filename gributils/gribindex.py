@@ -25,11 +25,35 @@ def check_result(res):
     except Exception as e:
         raise Exception("%s: %s" % (e, res.content))
 
+class GribCacheEntry(object):
+    def __init__(self, filepath):
+        self.filepath = filepath
+        self.last_access = datetime.now()
+        self.grbs = pygrib.open(filepath)
+        
+class GribCache(object):
+    def __init__(self, size=10):
+        self.size = size
+        self.entries = {}
+
+    def get(self, filepath):
+        if filepath not in self.entries:
+            if len(self.entries) >= self.size:
+                entries = list(entries.values)
+                entries.sort(key=lambda e: e.last_access)
+                del self.entries[entries[0].filepath]
+                entries[0].grbs.close()
+            self.entries[filepath] = GribCacheEntry(filepath)
+        entry = self.entries[filepath]
+        entry.last_access = datetime.now()
+        return entry.grbs
+        
 class GribIndex(object):
     def __init__(self, es_url):
         self.es_url = es_url
         self.gridcache = set()
         self.parametermapcache = {}
+        self.gribcache = GribCache()
         
     def extract_polygons(self, layer):
         shape = gributils.bounds.bounds(layer)
@@ -392,7 +416,7 @@ class GribIndex(object):
                      lat=None, lon=None):
 
         try:
-            layer = pygrib.open(gribfile)[int(layeridx)]
+            layer = self.gribcache.get(gribfile)[int(layeridx)]
             new_value = self.interp(layer, (lat, lon))
             return new_value
         except Exception as e:
@@ -412,8 +436,8 @@ class GribIndex(object):
         # FIXME: Interpolate along levels too maybe?
         
         def interpolate_parameter(layer_last_before, layer_first_after):
-            data_last_before = pygrib.open(layer_last_before["url"])[int(layer_last_before["idx"])]
-            data_first_after = pygrib.open(layer_first_after["url"])[int(layer_first_after["idx"])]
+            data_last_before = self.gribcache.get(layer_last_before["url"])[int(layer_last_before["idx"])]
+            data_first_after = self.gribcache.get(layer_first_after["url"])[int(layer_first_after["idx"])]
             
             timestamp_last_before = int(datetime.strptime(layer_last_before["validDate"], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%s"))
             timestamp_first_after = int(datetime.strptime(layer_first_after["validDate"], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%s"))
