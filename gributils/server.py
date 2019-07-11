@@ -3,6 +3,7 @@ from flask import Flask, request
 import uuid
 import os.path
 import json
+import datetime
 
 app = Flask(__name__)
 
@@ -33,7 +34,7 @@ def lookup():
         "lon": (float, None),
         "pretty": (bool, False)
     }
-    args = {name: argtypes[name][0](args[name]) if name in args else argtypes[name][1]
+    args = {name.replace("-", "_"): argtypes[name][0](args[name]) if name in args else argtypes[name][1]
             for name in argtypes.keys()}
     
     if pretty:
@@ -43,7 +44,7 @@ def lookup():
             json.dumps(row) + "\n"
             for row in index.lookup(**args))
 
-@app.route('/index/interp-latlon')
+@app.route('/index/interpolate/latlon')
 def interp_latlon():
     args = dict(request.args)
     argtypes = {
@@ -52,10 +53,28 @@ def interp_latlon():
         'lat': (float, None),
         'lon': (float, None)
     }
-    args = {name: argtypes[name][0](args[name]) if name in args else argtypes[name][1]
+    args = {name.replace("-", "_"): argtypes[name][0](args[name]) if name in args else argtypes[name][1]
             for name in argtypes.keys()}
     return json.dumps(index.interp_latlon(**args))
-    
+
+
+@app.route('/index/interpolate/timestamp')
+def interp_timestamp():
+    args = dict(request.args)
+    argtypes = {
+        'timestamp': (from_datetime, None),
+        'parameter-name': (str, None),
+        'parameter-unit': (str, None),
+        'type-of-level': (str, None),
+        'level': (float, None),
+        'level-highest-below': (bool, False),
+        'lat': (float, None),
+        'lon': (float, None)
+    }
+    args = {name.replace("-", "_"): argtypes[name][0](args[name]) if name in args else argtypes[name][1]
+            for name in argtypes.keys()}
+    return json.dumps(index.interp_timestamp(**args))
+
 @app.route('/index/add', methods=["POST"])
 def add_file():
     filename = os.path.join(filearea, "%s.grb" % (uuid.uuid4(),))
