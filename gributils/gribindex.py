@@ -395,7 +395,7 @@ class GribIndex(object):
     def interp_timestamp(self, lat=None, lon=None, timestamp=None,
                          parameter_name=None, parameter_unit=None,
                          type_of_level=None, level=None,
-                         timestamp_last_before=1, level_highest_below=True):
+                         level_highest_below=True):
 
         # FIXME: Interpolate along levels too maybe?
 
@@ -437,14 +437,14 @@ class GribIndex(object):
                         lat=lat, lon=lon, timestamp=timestamp,
                         parameter_name=parameter_name, parameter_unit=parameter_unit,
                         type_of_level=type_of_level, level=level,
-                        timestamp_last_before=1, level_highest_below=True))
+                        timestamp_last_before=1, level_highest_below=level_highest_below))
         
         layer_first_after =  to_map(
             self.lookup(output="layers",
                         lat=lat, lon=lon, timestamp=timestamp,
                         parameter_name=parameter_name, parameter_unit=parameter_unit,
                         type_of_level=type_of_level, level=level,
-                        timestamp_last_before=0, level_highest_below=True))
+                        timestamp_last_before=0, level_highest_below=level_highest_below))
 
         return [{"parameterName": key[0],
                  "parameterUnit": key[1],
