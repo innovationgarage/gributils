@@ -85,6 +85,20 @@ def bboxes(ctx, **kw):
             print(json.dumps(row))
 
 @index.command()
+@click.option('--lat', type=float)
+@click.option('--lon', type=float)
+@click.option('--pretty', is_flag=True)
+@click.pass_context
+def grids(ctx, **kw):
+    pretty = kw.pop("pretty", False)
+    res = ctx.obj["index"].get_grids_for_position(**kw)
+    if pretty:
+        print(json.dumps(res, indent=2))
+    else:
+        for row in res:
+            print(json.dumps(row))
+
+@index.command()
 @click.option('--gribfile', type=str)
 @click.option('--layeridx', type=str)
 @click.option('--lat', type=float)
@@ -102,9 +116,16 @@ def interp_latlon(ctx, **kw):
 @click.option('--level-highest-below', is_flag=True)
 @click.option('--lat', type=float)
 @click.option('--lon', type=float)
+@click.option('--pretty', is_flag=True)
 @click.pass_context
 def interp_timestamp(ctx, **kw):
-    print(ctx.obj["index"].interp_timestamp(**kw))
+    pretty = kw.pop("pretty", False)
+    res = ctx.obj["index"].interp_timestamp(**kw)
+    if pretty:
+        print(json.dumps(res, indent=2))
+    else:
+        for row in res:
+            print(json.dumps(row))
             
 @index.command()
 @click.option("--filepath", type=str)

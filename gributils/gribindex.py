@@ -240,7 +240,7 @@ class GribIndex(object):
     def add_file(self, filepath, **kw):
         print("Adding file", filepath)
         with pygrib.open(filepath) as grbs:
-            layers = [self.format_layer(grb, filepath, grb_idx, **kw)
+            layers = [self.format_layer(grb, filepath, grb_idx+1, **kw)
                       for grb_idx, grb in enumerate(grbs)]
         data = "".join(
             json.dumps({"index": {"_index": "geocloud-gribfile-layer", "_type":"doc"}}) + "\n" +
@@ -387,7 +387,7 @@ class GribIndex(object):
 
         try:
             layer = self.layercache.get(gribfile, int(layeridx))
-            return layer.interpolate(lay, lon)[0]
+            return layer.interpolate(lat, lon)[0]
         except Exception as e:
             print('Unable to load layer:', e)
             return None
