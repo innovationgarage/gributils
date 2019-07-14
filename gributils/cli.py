@@ -105,7 +105,7 @@ def interp_latlon(ctx, **kw):
 @click.pass_context
 def interp_timestamp(ctx, **kw):
     print(ctx.obj["index"].interp_timestamp(**kw))
-        
+            
 @index.command()
 @click.option("--filepath", type=str)
 @click.option("--parametermap", type=str)

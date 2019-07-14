@@ -14,6 +14,7 @@ import pyproj
 import functools
 import hashlib
 import gributils.bounds
+import gributils.layer
 import csv
 from datetime import datetime
 import requests
@@ -24,36 +25,14 @@ def check_result(res):
         return res
     except Exception as e:
         raise Exception("%s: %s" % (e, res.content))
-
-class GribCacheEntry(object):
-    def __init__(self, filepath):
-        self.filepath = filepath
-        self.last_access = datetime.now()
-        self.grbs = pygrib.open(filepath)
-        
-class GribCache(object):
-    def __init__(self, size=10):
-        self.size = size
-        self.entries = {}
-
-    def get(self, filepath):
-        if filepath not in self.entries:
-            if len(self.entries) >= self.size:
-                entries = list(entries.values)
-                entries.sort(key=lambda e: e.last_access)
-                del self.entries[entries[0].filepath]
-                entries[0].grbs.close()
-            self.entries[filepath] = GribCacheEntry(filepath)
-        entry = self.entries[filepath]
-        entry.last_access = datetime.now()
-        return entry.grbs
-        
+    
 class GribIndex(object):
     def __init__(self, es_url):
         self.es_url = es_url
         self.gridcache = set()
         self.parametermapcache = {}
-        self.gribcache = GribCache()
+        self.gribcache = gributils.layer.GribCache()
+        self.layercache = gributils.layer.LayerCache()
         
     def extract_polygons(self, layer):
         shape = gributils.bounds.bounds(layer)
@@ -401,24 +380,14 @@ class GribIndex(object):
         else:
             res = [item["_source"] for item in res["hits"]["hits"]]
         return res
-
-    def interp(self, layer, point):
-        data = layer.data()
-        x = data[2][0,:]
-        y = data[1][:,0]
-        z = data[0]
-        f = interpolate.interp2d(x, y, z, kind='cubic')
-        xnew, ynew = point
-        return f(xnew, ynew)[0]
     
     def interp_latlon(self,
                      gribfile=None, layeridx=None,
                      lat=None, lon=None):
 
         try:
-            layer = self.gribcache.get(gribfile)[int(layeridx)]
-            new_value = self.interp(layer, (lat, lon))
-            return new_value
+            layer = self.layercache.get(gribfile, int(layeridx))
+            return layer.interpolate(lay, lon)[0]
         except Exception as e:
             print('Unable to load layer:', e)
             return None
@@ -428,22 +397,29 @@ class GribIndex(object):
                          type_of_level=None, level=None,
                          timestamp_last_before=1, level_highest_below=True):
 
+        # FIXME: Interpolate along levels too maybe?
+
+        if isinstance(timestamp, str):
+            try:
+                timestamp = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
+            except:
+                timestamp = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+        timestamp_int = int(timestamp.strftime("%s"))
+
         def to_map(entries):
             return {
                 (entry["parameterName"], entry["parameterUnit"], entry["typeOfLevel"], entry["level"]): entry
                 for entry in entries}
 
-        # FIXME: Interpolate along levels too maybe?
-        
         def interpolate_parameter(layer_last_before, layer_first_after):
-            data_last_before = self.gribcache.get(layer_last_before["url"])[int(layer_last_before["idx"])]
-            data_first_after = self.gribcache.get(layer_first_after["url"])[int(layer_first_after["idx"])]
-            
+            data_last_before = self.layercache.get(layer_last_before["url"], int(layer_last_before["idx"]))
+            data_first_after = self.layercache.get(layer_first_after["url"], int(layer_first_after["idx"]))
+
+            parameter_last_before = data_last_before.interpolate(lat, lon)[0]
+            parameter_first_after = data_first_after.interpolate(lat, lon)[0]
+
             timestamp_last_before = int(datetime.strptime(layer_last_before["validDate"], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%s"))
             timestamp_first_after = int(datetime.strptime(layer_first_after["validDate"], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%s"))
-            
-            parameter_last_before = self.interp(data_last_before, (lat, lon))
-            parameter_first_after = self.interp(data_first_after, (lat, lon))
 
             if timestamp_last_before == timestamp_first_after:
                 # Avoid a divide by zero in interp1d...
@@ -454,15 +430,7 @@ class GribIndex(object):
             
             f = interpolate.interp1d(x, y)
         
-            if isinstance(timestamp, str):
-                try:
-                    ts = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
-                except:
-                    ts = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
-            else:
-                ts = timestamp
-
-            return float(f(int(ts.strftime("%s"))))
+            return float(f(timestamp_int))
         
         layer_last_before =  to_map(
             self.lookup(output="layers",
