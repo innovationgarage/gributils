@@ -290,7 +290,7 @@ class GribIndex(object):
                lat=None, lon=None, timestamp=None, parameter_name=None, parameter_unit=None, type_of_level=None, level=None,
                timestamp_last_before=1, level_highest_below=True):
         """Return a set of griblayers matching the specified requirements"""
-
+        
         aggregation = None
         
         if output == "layers":
