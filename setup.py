@@ -35,6 +35,7 @@ indexing gribfiles. Current features include:
           'scikit-image',
           'click',
           'click-datetime',
+          'flask',
           'requests'
       ],
       include_package_data=True,

@@ -85,5 +85,17 @@ def add_file():
     index.add_file(filename, parametermap = parametermap)
     return json.dumps({"status": "success"})
 
+@app.route('/index/parametermap/add', methods=["POST"])
+def parametermap_add_file():
+    filename = os.path.join(filearea, "%s.csv" % (uuid.uuid4(),))
+    with open(filename, "wb") as f:
+        f.write(request.get_data())
+    index.add_parametermap(mapping=filename, name=request.args.get("name"))
+    return json.dumps({"status": "success"})
+    
+@app.route('/index/parametermap')
+def parametermap_list():
+    return json.dumps(index.get_parametermaps())
+
 if __name__ == "__main__":
     app.run()
