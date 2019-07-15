@@ -406,20 +406,36 @@ class GribIndex(object):
                 timestamp = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
         timestamp_int = int(timestamp.strftime("%s"))
 
+        def synthesize_uv_entries(entries):
+            components = {"U": {}, "V": {}}
+            for entry in entries:
+                if " component of " in entry["parameterName"]:
+                    compname, name = entry["parameterName"].split(" component of ")
+                    components[compname][(name, entry["parameterUnit"], entry["typeOfLevel"], entry["level"], entry["validDate"])] = entry
+                yield entry
+            for key, entryU in components["U"].items():
+                entryV = components["V"][key]
+                entry = dict(entryU)
+                entry["idx"] = (entryU["idx"], entryV["idx"], "azimuth")
+                entry["parameterName"] = "Azimuth component of %s" % key[0]
+                yield entry
+                entry = dict(entryU)
+                entry["idx"] = (entryU["idx"], entryV["idx"], "magnitude")
+                entry["parameterName"] = "Magnitude component of %s" % key[0]
+                yield entry
+                
         def to_map(entries):
             return {
-                (entry["parameterName"], entry["parameterUnit"], entry["typeOfLevel"], entry["level"]): entry
+                (entry["parameterName"], entry["parameterUnit"], entry["typeOfLevel"], entry["level"]):
+                self.layercache.get(entry["url"], entry["idx"])
                 for entry in entries}
 
-        def interpolate_parameter(layer_last_before, layer_first_after):
-            data_last_before = self.layercache.get(layer_last_before["url"], int(layer_last_before["idx"]))
-            data_first_after = self.layercache.get(layer_first_after["url"], int(layer_first_after["idx"]))
-
+        def interpolate_parameter(data_last_before, data_first_after):
             parameter_last_before = data_last_before.interpolate(lat, lon)[0]
             parameter_first_after = data_first_after.interpolate(lat, lon)[0]
 
-            timestamp_last_before = int(datetime.strptime(layer_last_before["validDate"], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%s"))
-            timestamp_first_after = int(datetime.strptime(layer_first_after["validDate"], '%Y-%m-%dT%H:%M:%S.%fZ').strftime("%s"))
+            timestamp_last_before = data_last_before.valid_date
+            timestamp_first_after = data_first_after.valid_date
 
             if timestamp_last_before == timestamp_first_after:
                 # Avoid a divide by zero in interp1d...
@@ -433,18 +449,20 @@ class GribIndex(object):
             return float(f(timestamp_int))
         
         layer_last_before =  to_map(
-            self.lookup(output="layers",
-                        lat=lat, lon=lon, timestamp=timestamp,
-                        parameter_name=parameter_name, parameter_unit=parameter_unit,
-                        type_of_level=type_of_level, level=level,
-                        timestamp_last_before=1, level_highest_below=level_highest_below))
+            synthesize_uv_entries(
+                self.lookup(output="layers",
+                            lat=lat, lon=lon, timestamp=timestamp,
+                            parameter_name=parameter_name, parameter_unit=parameter_unit,
+                            type_of_level=type_of_level, level=level,
+                            timestamp_last_before=1, level_highest_below=level_highest_below)))
         
-        layer_first_after =  to_map(
-            self.lookup(output="layers",
-                        lat=lat, lon=lon, timestamp=timestamp,
-                        parameter_name=parameter_name, parameter_unit=parameter_unit,
-                        type_of_level=type_of_level, level=level,
-                        timestamp_last_before=0, level_highest_below=level_highest_below))
+        layer_first_after = to_map(
+            synthesize_uv_entries(
+                self.lookup(output="layers",
+                            lat=lat, lon=lon, timestamp=timestamp,
+                            parameter_name=parameter_name, parameter_unit=parameter_unit,
+                            type_of_level=type_of_level, level=level,
+                            timestamp_last_before=0, level_highest_below=level_highest_below)))
 
         return [{"parameterName": key[0],
                  "parameterUnit": key[1],

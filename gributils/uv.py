@@ -1,4 +1,6 @@
 import gributils.projection
+import pyproj
+import numpy as np
 
 wgs84_geod = pyproj.Geod(ellps='WGS84')
 
