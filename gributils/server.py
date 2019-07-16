@@ -10,6 +10,14 @@ app = Flask(__name__)
 filearea = None
 index = None
 
+def format_result(result, pretty):
+    if pretty:
+        return json.dumps(result, indent=2)
+    else:
+        return "".join(
+            json.dumps(row) + "\n"
+            for row in result)
+
 @app.route('/')
 def hello_world():
     return 'Hello, World!'
@@ -20,7 +28,6 @@ def from_datetime(value):
 @app.route('/index/lookup')
 def lookup():
     args = dict(request.args)
-    pretty = args.pop("pretty", False)
     argtypes = {
         "output": (str, "layers"),
         "timestamp": (from_datetime, None),
@@ -36,13 +43,8 @@ def lookup():
     }
     args = {name.replace("-", "_"): argtypes[name][0](args[name]) if name in args else argtypes[name][1]
             for name in argtypes.keys()}
-    
-    if pretty:
-        return json.dumps(index.lookup(**args), indent=2)
-    else:
-        return "".join(
-            json.dumps(row) + "\n"
-            for row in index.lookup(**args))
+    pretty = args.pop("pretty", False)
+    return format_result(index.lookup(**args), pretty)
 
 @app.route('/index/interpolate/latlon')
 def interp_latlon():
@@ -69,12 +71,13 @@ def interp_timestamp():
         'level': (float, None),
         'level-highest-below': (bool, False),
         'lat': (float, None),
-        'lon': (float, None)
+        'lon': (float, None),
+        "pretty": (bool, False)
     }
     args = {name.replace("-", "_"): argtypes[name][0](args[name]) if name in args else argtypes[name][1]
             for name in argtypes.keys()}
-    val = index.interp_timestamp(**args)
-    return json.dumps(val)
+    pretty = args.pop("pretty", False)
+    return format_result(index.interp_timestamp(**args), pretty)
 
 @app.route('/index/add', methods=["POST"])
 def add_file():

@@ -475,4 +475,5 @@ class GribIndex(object):
                  "typeOfLevel": key[2],
                  "level": key[3],
                  "value": interpolate_parameter(layer_last_before[key], layer_first_after[key])}
-                for key in layer_last_before.keys()]
+                for key in layer_last_before.keys()
+                if key in layer_first_after]
