@@ -25,7 +25,13 @@ def check_result(res):
         return res
     except Exception as e:
         raise Exception("%s: %s" % (e, res.content))
-    
+
+def check_es_result(res):
+    res = check_result(res)
+    if not res.json().get('acknowledged'):
+        raise Exception(json.dumps(res.json(), indent=2))
+    return res
+     
 class GribIndex(object):
     def __init__(self, es_url):
         self.es_url = es_url
@@ -39,7 +45,7 @@ class GribIndex(object):
         return gributils.bounds.polygon_id(shape), shape
 
     def init_db(self):
-        check_result(
+        check_es_result(
             requests.put("%s/geocloud-gribfile-parametermap" % self.es_url,
                          json={
                              "mappings": {
@@ -52,7 +58,7 @@ class GribIndex(object):
                              }
                          }))
         
-        check_result(
+        check_es_result(
             requests.put("%s/geocloud-gribfile-grid" % self.es_url,
                          json={
                              "mappings": {
@@ -69,7 +75,7 @@ class GribIndex(object):
                              }
                          }))
 
-        check_result(
+        check_es_result(
             requests.put("%s/geocloud-gribfile-layer" % self.es_url,
                          json={
                              "mappings": {
