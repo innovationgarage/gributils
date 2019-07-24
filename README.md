@@ -54,3 +54,7 @@ Extracting layer boundaries from a grib layer:
     >>> # Calculate a unique id identifying this polygon that can be used for database lookups etc
     >>> gributils.bounds.polygon_id(poly_real_coords)
     '36cf52a2cd2ee4aed01095e7cd831f5f2c9a96c292eaca40de1b2d63c62ab1b8'
+
+# Additional tools
+
+[Gributils annotator](https://github.com/innovationgarage/gributils-annotator) lets you annotate streams of positional data with weather using gributils.
