@@ -3,7 +3,7 @@
 import setuptools
 
 setuptools.setup(name='gributils',
-      version='0.8',
+      version='0.9',
       description='Utils on top of pygrib for extracting metadata and manipulating grib files',
       long_description="""gributils is a set of utilities on top of pygrib for manipulating and
 indexing gribfiles. Current features include:

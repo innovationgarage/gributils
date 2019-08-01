@@ -241,7 +241,12 @@ def add_file():
         description: "The file was successfully added to the index"
     """
     args = argparse(request)
-    filename = os.path.join(filearea, "%s.grb" % (uuid.uuid4(),))
+    time = datetime.datetime.now().strftime('%Y-%m-%d')
+    id = str(uuid.uuid4())
+    dirpath = os.path.join(filearea, time, id[:3])
+    if not os.path.exists(dirpath):
+        os.makedirs(dirpath)
+    filename = os.path.join(dirpath, "%s.grb" % id)
     with open(filename, "wb") as f:
         f.write(request.get_data())
     index.add_file(filename, **args)
