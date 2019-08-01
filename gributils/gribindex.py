@@ -223,12 +223,12 @@ class GribIndex(object):
             requests.post("%s/geocloud-gribfile-layer/doc" % self.es_url,
                           json = self.format_layer(grb, url, idx, **kw)))
 
-    def format_layer(self, grb, url, idx, **kw):
+    def format_layer(self, grb, url, idx, extra={}, **kw):
         gridid = self.get_grid_for_layer(grb)
 
         parameter_name, parameter_unit = self.map_parameter(url, grb, **kw)
 
-        return {
+        res = {
             "gridid": gridid,
 
             "parameterName": parameter_name,
@@ -242,6 +242,9 @@ class GribIndex(object):
             "url": url,
             "idx": idx
         }
+        res.update(extra)
+        return res
+        
     
     def add_file(self, filepath, **kw):
         print("Adding file", filepath)

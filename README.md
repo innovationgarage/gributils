@@ -55,6 +55,18 @@ Extracting layer boundaries from a grib layer:
     >>> gributils.bounds.polygon_id(poly_real_coords)
     '36cf52a2cd2ee4aed01095e7cd831f5f2c9a96c292eaca40de1b2d63c62ab1b8'
 
+# REST usage
+
+The rest API is described in the swagger documentation available at http://localhost:1028/
+
+    ex@ample:~# gributils server --database="http://elasticsearch:9200"
+
+    ex@ample:~# curl 'http://localhost:1028/index/interpolate/timestamp?lat=63&lon=10&timestamp=2018-08-21T19:32:00.000000Z'
+    {'parameterName': 'P Pressure',          'parameterUnit': 'Pa',    'typeOfLevel': 'heightAboveGround', 'level': 0,  'value': 101673.95000000001}
+    {'parameterName': 'U component of wind', 'parameterUnit': 'm s-1', 'typeOfLevel': 'heightAboveGround', 'level': 10, 'value': -2.0344434102376305}
+    {'parameterName': 'V component of wind', 'parameterUnit': 'm s-1', 'typeOfLevel': 'heightAboveGround', 'level': 10, 'value': 1.9993160883585617}
+
+
 # Additional tools
 
 [Gributils annotator](https://github.com/innovationgarage/gributils-annotator) lets you annotate streams of positional data with weather using gributils.
