@@ -66,6 +66,11 @@ The rest API is described in the swagger documentation available at http://local
     {'parameterName': 'U component of wind', 'parameterUnit': 'm s-1', 'typeOfLevel': 'heightAboveGround', 'level': 10, 'value': -2.0344434102376305}
     {'parameterName': 'V component of wind', 'parameterUnit': 'm s-1', 'typeOfLevel': 'heightAboveGround', 'level': 10, 'value': 1.9993160883585617}
 
+# Installation
+
+    apt install libgrib-api-dev libeccodes-dev
+    pip install pyproj numpy flask
+    python setup.py install
 
 # Additional tools
 

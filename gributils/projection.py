@@ -1,5 +1,6 @@
 import pyproj
 import functools
+import numpy
 
 class LayerProjection(object):
     def __init__(self, layer):
@@ -41,3 +42,7 @@ class LayerProjection(object):
         """Returns x,y in projected units (suitable for
         self.unproject) given input in grid coordinates x_index, y_index"""
         return self.x0 + self.dx*x, self.y0 + self.dy*y
+
+    def latlons(self):
+        lons, lats = self.scale(*numpy.meshgrid(numpy.arange(0, self.nx), numpy.arange(0, self.ny)))
+        return lats, lons
