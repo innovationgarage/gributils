@@ -15,6 +15,7 @@ indexing gribfiles. Current features include:
 * Conversion from values with U and V components (e.g. for wind) to
   magnitude and degree north.
 
+<img align="center" width="600" src="https://raw.githubusercontent.com/innovationgarage/gributils/master/docs/gribfile.png">
 
 # Command line usage
 
