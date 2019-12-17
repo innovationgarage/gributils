@@ -18,7 +18,7 @@ RUN pip3 install scipy
 RUN pip3 install scikit-image
 RUN pip3 install click-datetime
 RUN pip3 install requests
-RUN pip3 install gributils
+RUN pip3 install gributils>=0.11.0
 
 ADD index.sh /index.sh
 
