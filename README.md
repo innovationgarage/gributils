@@ -62,6 +62,12 @@ The rest API is described in the swagger documentation available at http://local
 
     ex@ample:~# gributils server --database="http://elasticsearch:9200"
 
+    ex@ample:~# curl 'http://localhost:1028/index/parametermap/add?name=smhi_arome' --data-binary "@parametermaps/smhi/arome/parametermap.csv"
+    {"status": "success"}
+
+    ex@ample:~# curl 'http://localhost:1028/index/add?parametermap=smhi_arome&extra=\{\}' --data-binary "@file.grib"
+    {"status": "success"}
+
     ex@ample:~# curl 'http://localhost:1028/index/interpolate/timestamp?lat=63&lon=10&timestamp=2018-08-21T19:32:00.000000Z'
     {'parameterName': 'P Pressure',          'parameterUnit': 'Pa',    'typeOfLevel': 'heightAboveGround', 'level': 0,  'value': 101673.95000000001}
     {'parameterName': 'U component of wind', 'parameterUnit': 'm s-1', 'typeOfLevel': 'heightAboveGround', 'level': 10, 'value': -2.0344434102376305}
